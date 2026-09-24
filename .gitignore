@@ -1,0 +1,13 @@
+# 로컬 설정. 공개 키라도 저장소에는 올리지 않습니다.
+js/config.js
+
+# 환경 변수 파일
+.env
+.env.*
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

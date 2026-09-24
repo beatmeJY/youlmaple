@@ -1,0 +1,62 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 설정 파일 만들기
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          python3 - << 'PY'
+          import json, os, pathlib
+          url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+          key = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip()
+          if not url.startswith("https://") or not url.endswith(".supabase.co"):
+              raise SystemExit("SUPABASE_URL 이 비어 있거나 형식이 아닙니다.")
+          if (not key) or ("YOUR_KEY" in key) or key.startswith("sb_secret_"):
+              raise SystemExit("Publishable key만 GitHub Secret에 넣을 수 있습니다.")
+          text = (
+              "export const config = {\n"
+              f"  supabaseUrl: {json.dumps(url)},\n"
+              f"  supabasePublishableKey: {json.dumps(key)},\n"
+              "};\n"
+          )
+          pathlib.Path("js/config.js").write_text(text, encoding="utf-8")
+          PY
+
+      - name: 공개할 파일만 모으기
+        run: |
+          mkdir -p _site
+          cp index.html .nojekyll _site/
+          cp -r css js _site/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
