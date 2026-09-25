@@ -11,13 +11,17 @@ where n.nspname = 'public'
   and c.relname in (
     'profiles',
     'accounts',
+    'jobs',
     'characters',
     'monsters',
-    'items',
+    'trades',
     'quests',
     'quest_notes',
     'character_quests',
-    'notes'
+    'notes',
+    'links',
+    'hunts',
+    'level_exp'
   )
 order by c.relname;
 
@@ -31,12 +35,16 @@ where table_schema = 'public'
   and table_name in (
     'profiles',
     'accounts',
+    'jobs',
     'characters',
     'monsters',
-    'items',
+    'trades',
     'quests',
     'quest_notes',
     'character_quests',
-    'notes'
+    'notes',
+    'links',
+    'hunts',
+    'level_exp'
   )
 order by table_name, grantee, privilege_type;

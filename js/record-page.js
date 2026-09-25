@@ -1,9 +1,23 @@
 import { translateDbError } from "./db-error.js";
-import { readCount, readDecimal } from "./format.js";
+import { escapeHtml, readCount, readDecimal } from "./format.js";
 import { filterRows, readLevelFilter } from "./filters.js";
 import { getSupabase } from "./supabase-client.js";
+import { notify } from "./toast.js";
 
 function fieldHtml(field) {
+  if (field.kind === "checks") {
+    const boxes = field.options
+      .map(
+        (option) => {
+          const tone = option.tone ? ` data-element="${escapeHtml(option.tone)}"` : "";
+          const toneClass = option.tone ? " element-pick" : "";
+          return `<label class="check-line${toneClass}"${tone}><input type="checkbox" name="${escapeHtml(field.name)}" value="${escapeHtml(option.value)}" /><span>${escapeHtml(option.label)}</span></label>`;
+        },
+      )
+      .join("");
+    const hint = field.hint ? `<p class="hint">${escapeHtml(field.hint)}</p>` : "";
+    return `<fieldset class="field span-all"><legend>${escapeHtml(field.label)}</legend><div class="element-picks">${boxes}</div>${hint}</fieldset>`;
+  }
   if (field.kind === "textarea") {
     return `<label class="field"><span>${field.label}</span><textarea name="${field.name}"></textarea></label>`;
   }
@@ -16,25 +30,21 @@ function fieldHtml(field) {
   const mode = field.kind === "decimal" ? ` inputmode="decimal"` : field.kind === "number" ? ` inputmode="numeric"` : "";
   const type = field.kind === "date" ? "date" : "text";
   const required = field.required ? " required" : "";
-  return `<label class="field"><span>${field.label}</span><input name="${field.name}" type="${type}"${mode}${required} /></label>`;
+  const placeholder = field.placeholder ? ` placeholder="${escapeHtml(field.placeholder)}"` : "";
+  return `<label class="field"><span>${field.label}</span><input name="${field.name}" type="${type}"${mode}${required}${placeholder} /></label>`;
 }
 
 export async function renderRecords(root, options) {
-  const levelFilters = options.levelMode
-    ? `
+  const levelFilters =
+    options.levelFilters ??
+    (options.levelMode
+      ? `
       <label class="field"><span>레벨 최소</span><input data-level-min inputmode="numeric" /></label>
       <label class="field"><span>레벨 최대</span><input data-level-max inputmode="numeric" /></label>
     `
-    : "";
-  root.innerHTML = `
-    <header class="page-header">
-      <h1>${options.title}</h1>
-      <p>${options.description}</p>
-    </header>
-    <div class="page-toolbar">
-      <button class="primary-button" type="button" data-add>${options.addLabel}</button>
-    </div>
-    <p class="form-message" data-status hidden></p>
+      : "");
+  const filterClass = options.filterClass ? ` ${options.filterClass}` : options.levelMode || options.levelFilters ? "" : " filters-search-only";
+  const formHtml = `
     <form class="editor" hidden>
       <h2 data-form-title>${options.addLabel}</h2>
       ${options.fields.map(fieldHtml).join("")}
@@ -42,26 +52,48 @@ export async function renderRecords(root, options) {
         <button class="primary-button" type="submit">저장</button>
         <button class="secondary-button" type="button" data-cancel>취소</button>
       </div>
-    </form>
-    <div class="filters${options.levelMode ? "" : " filters-search-only"}">
+    </form>`;
+  const filtersInner = `
       <label class="field"><span>${options.searchLabel}</span><input data-search placeholder="${options.searchPlaceholder}" /></label>
-      ${levelFilters}
+      ${levelFilters}`;
+  const filtersHtml =
+    options.filterClass === "filters-my-level"
+      ? `<div class="filter-shell"><div class="filters${filterClass}">${filtersInner}</div></div>`
+      : `<div class="filters${filterClass}">${filtersInner}</div>`;
+  const listHtml = `${formHtml}${filtersHtml}${options.extraHtml || ""}<div data-list></div>`;
+  root.innerHTML = options.shell
+    ? `
+    <div class="studio-page">
+      <header class="page-header">
+        <p class="studio-kicker">${options.kicker || ""}</p>
+        <div class="studio-hero-row">
+          <h1>${options.title}</h1>
+          <div class="button-row">
+            ${options.toolbarHtml || ""}
+            <button class="primary-button" type="button" data-add>${options.addLabel}</button>
+          </div>
+        </div>
+      </header>
+      <section class="studio-board">${listHtml}</section>
+    </div>`
+    : `
+    <header class="page-header">
+      <h1>${options.title}</h1>
+    </header>
+    <div class="page-toolbar">
+      <button class="primary-button" type="button" data-add>${options.addLabel}</button>
+      ${options.toolbarHtml || ""}
     </div>
-    ${options.extraHtml || ""}
-    <div data-list></div>
-  `;
+    ${listHtml}`;
 
   const list = root.querySelector("[data-list]");
   const form = root.querySelector("form");
-  const status = root.querySelector("[data-status]");
   const title = root.querySelector("[data-form-title]");
   let rows = [];
   let loadId = 0;
 
   function showStatus(text, kind) {
-    status.hidden = !text;
-    status.textContent = text;
-    status.className = `form-message is-${kind}`;
+    notify(text, kind);
   }
 
   function fillForm(row) {
@@ -69,10 +101,23 @@ export async function renderRecords(root, options) {
     form.dataset.editingId = row.id || "";
     title.textContent = row.id ? "수정" : options.addLabel;
     for (const field of options.fields) {
+      if (field.kind === "checks") {
+        const picked = new Set(
+          String(row[field.name] ?? "")
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        );
+        for (const input of form.querySelectorAll(`input[name="${field.name}"]`)) {
+          input.checked = picked.has(input.value);
+        }
+        continue;
+      }
       const input = form.elements.namedItem(field.name);
       if (input) input.value = row[field.name] ?? "";
     }
     form.elements[options.fields[0].name].focus();
+    form.scrollIntoView({ block: "nearest" });
   }
 
   function closeForm() {
@@ -82,13 +127,15 @@ export async function renderRecords(root, options) {
   }
 
   function paintList() {
+    const bounds = options.readBounds
+      ? options.readBounds(root)
+      : options.levelMode
+        ? readLevelFilter(root.querySelector("[data-level-min]").value, root.querySelector("[data-level-max]").value)
+        : null;
     if (!rows.length) {
       list.innerHTML = `<p class="empty">${options.emptyText}</p>`;
       return;
     }
-    const bounds = options.levelMode
-      ? readLevelFilter(root.querySelector("[data-level-min]").value, root.querySelector("[data-level-max]").value)
-      : null;
     const filtered = filterRows(rows, {
       query: root.querySelector("[data-search]").value,
       fields: options.searchFields,
@@ -102,8 +149,9 @@ export async function renderRecords(root, options) {
       list.innerHTML = `<p class="empty">${filtered.error}</p>`;
       return;
     }
+    if (options.match) filtered.rows = filtered.rows.filter((row) => options.match(row, root));
     if (!filtered.rows.length) {
-      list.innerHTML = `<p class="empty">검색 결과가 없습니다. 검색어나 레벨 범위를 바꿔 보세요.</p>`;
+      list.innerHTML = `<p class="empty">${options.emptyFilterText || "검색 결과가 없습니다. 검색어나 레벨 범위를 바꿔 보세요."}</p>`;
       return;
     }
     if (options.sheet) {
@@ -121,12 +169,20 @@ export async function renderRecords(root, options) {
       list.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>${head}<th>작업</th></tr></thead><tbody>${body}</tbody></table></div>`;
       return;
     }
-    list.innerHTML = `<div class="card-list">${filtered.rows.map((row) => options.card(row)).join("")}</div>`;
+    list.innerHTML = `<div class="card-list">${options.listHead || ""}${filtered.rows.map((row) => options.card(row)).join("")}</div>`;
   }
 
   function readForm() {
     const payload = {};
     for (const field of options.fields) {
+      if (field.kind === "checks") {
+        const picked = new Set(
+          [...form.querySelectorAll(`input[name="${field.name}"]:checked`)].map((input) => input.value),
+        );
+        const ordered = field.options.filter((option) => picked.has(option.value)).map((option) => option.value);
+        payload[field.name] = ordered.length ? ordered.join(", ") : null;
+        continue;
+      }
       const raw = form.elements[field.name].value;
       if (field.kind === "number" || field.kind === "decimal") {
         const parsed = (field.kind === "decimal" ? readDecimal : readCount)(
@@ -165,14 +221,43 @@ export async function renderRecords(root, options) {
       return;
     }
     rows = data ?? [];
+    if (options.settle) {
+      const settled = await options.settle(rows, supabase);
+      if (current !== loadId || !list.isConnected) return;
+      if (settled?.error) {
+        rows = [];
+        list.innerHTML = "";
+        showStatus(translateDbError(settled.error), "error");
+        return;
+      }
+      if (settled?.rows) rows = settled.rows;
+      if (settled?.message) showStatus(settled.message, "info");
+    }
     paintList();
   }
 
   root.addEventListener("input", (event) => {
-    if (event.target.closest("[data-search], [data-level-min], [data-level-max]")) paintList();
+    if (event.target.closest(".filters input, .filters select")) paintList();
   });
 
   root.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-reset-search]")) {
+      for (const input of root.querySelectorAll(".filters input, .filters select")) input.value = "";
+      for (const button of root.querySelectorAll(".filters [data-element-toggle]")) {
+        button.setAttribute("aria-pressed", "false");
+        button.classList.remove("is-on");
+      }
+      paintList();
+      return;
+    }
+    const elementToggle = event.target.closest("[data-element-toggle]");
+    if (elementToggle) {
+      const on = elementToggle.getAttribute("aria-pressed") !== "true";
+      elementToggle.setAttribute("aria-pressed", on ? "true" : "false");
+      elementToggle.classList.toggle("is-on", on);
+      paintList();
+      return;
+    }
     if (event.target.closest("[data-add]")) {
       showStatus("", "info");
       fillForm({ id: "" });
@@ -215,17 +300,19 @@ export async function renderRecords(root, options) {
     showStatus("저장하는 중입니다.", "info");
     const supabase = await getSupabase();
     const id = form.dataset.editingId;
-    const query = id
-      ? supabase.from(options.table).update(parsed.value).eq("id", id)
-      : supabase.from(options.table).insert(parsed.value);
-    const { error } = await query;
+    const result = options.commit
+      ? await options.commit({ payload: parsed.value, id, rows, supabase })
+      : await (id
+          ? supabase.from(options.table).update(parsed.value).eq("id", id)
+          : supabase.from(options.table).insert(parsed.value));
+    const error = result?.error;
     saveButton.disabled = false;
     if (error) {
       showStatus(translateDbError(error), "error");
       return;
     }
     closeForm();
-    showStatus(id ? "수정했습니다." : "저장했습니다.", "info");
+    showStatus(result?.message || (id ? "수정했습니다." : "저장했습니다."), "info");
     await loadRows();
   });
 

@@ -1,9 +1,11 @@
 import { signOut, startAuth, translateAuthError } from "./auth.js";
 import { renderLogin, renderSetup } from "./pages/login.js";
 import { renderNav, renderRoute } from "./router.js";
-import { applyTheme, getTheme, renderShell, setNavOpen, syncThemeButton } from "./ui.js";
+import { clearToasts, notify } from "./toast.js";
+import { applyNavPreference, applyTheme, getTheme, isDesktopNav, renderShell, setNavCollapsed, setNavOpen, syncThemeButton } from "./ui.js";
 
 applyTheme(getTheme());
+applyNavPreference();
 
 const app = document.querySelector("#app");
 let mode = "loading";
@@ -18,6 +20,7 @@ async function showPage() {
   const nav = document.querySelector("#nav");
   if (!main || !nav) return;
   const activeId = await renderRoute(main);
+  main.dataset.page = activeId;
   renderNav(nav, activeId);
   setNavOpen(false);
 }
@@ -25,6 +28,7 @@ async function showPage() {
 function showApp(session) {
   const entered = mode !== "app";
   if (entered) {
+    clearToasts();
     renderShell();
     mode = "app";
   }
@@ -49,8 +53,14 @@ function showSetup(error) {
 }
 
 document.body.addEventListener("click", async (event) => {
-  if (event.target.closest("[data-open-nav]")) setNavOpen(true);
-  if (event.target.closest("[data-close-nav]")) setNavOpen(false);
+  if (event.target.closest("[data-open-nav]")) {
+    if (isDesktopNav()) setNavCollapsed(!document.body.classList.contains("nav-collapsed"));
+    else setNavOpen(true);
+  }
+  if (event.target.closest("[data-close-nav]")) {
+    if (isDesktopNav()) setNavCollapsed(true);
+    else setNavOpen(false);
+  }
   if (event.target.closest("[data-theme-toggle]")) {
     const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
     applyTheme(next);
@@ -63,7 +73,7 @@ document.body.addEventListener("click", async (event) => {
       await signOut();
     } catch (error) {
       button.disabled = false;
-      window.alert(translateAuthError(error));
+      notify(translateAuthError(error), "error");
     }
   }
 });

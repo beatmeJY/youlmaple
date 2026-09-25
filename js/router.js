@@ -3,14 +3,18 @@ import { routes } from "./routes.js";
 const pages = {
   dashboard: () => import("./pages/dashboard.js"),
   characters: () => import("./pages/characters.js"),
+  hunts: () => import("./pages/hunts.js"),
+  dojo: () => import("./pages/dojo.js"),
   monsters: () => import("./pages/monsters.js"),
-  items: () => import("./pages/items.js"),
+  trades: () => import("./pages/trades.js"),
   quests: () => import("./pages/quests.js"),
   notes: () => import("./pages/notes.js"),
+  links: () => import("./pages/links.js"),
 };
 
 export function getRouteId() {
   const id = location.hash.replace(/^#\/?/, "");
+  if (id === "items") return "trades";
   return pages[id] ? id : "dashboard";
 }
 
@@ -25,19 +29,21 @@ export async function renderRoute(root) {
   return id;
 }
 
+function navLink(route, activeId) {
+  return `
+    <a
+      class="nav-link${route.id === activeId ? " is-active" : ""}"
+      href="#/${route.id}"
+      data-route="${route.id}"
+    >
+      <span>${route.label}</span>
+    </a>
+  `;
+}
+
 export function renderNav(nav, activeId) {
-  nav.innerHTML = routes
-    .map(
-      (route) => `
-        <a
-          class="nav-link${route.id === activeId ? " is-active" : ""}"
-          href="#/${route.id}"
-          data-route="${route.id}"
-        >
-          <span>${route.label}</span>
-          <small>${route.description}</small>
-        </a>
-      `,
-    )
-    .join("");
+  const main = routes.filter((route) => !route.pin);
+  const pinned = routes.filter((route) => route.pin);
+  const spacer = pinned.length ? `<div class="nav-spacer"></div>` : "";
+  nav.innerHTML = `${main.map((route) => navLink(route, activeId)).join("")}${spacer}${pinned.map((route) => navLink(route, activeId)).join("")}`;
 }

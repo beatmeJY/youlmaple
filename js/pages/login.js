@@ -1,10 +1,11 @@
 import { signIn, signUp } from "../auth.js";
+import { notify } from "../toast.js";
 
 export function renderSetup(root, message, title = "설정이 필요합니다") {
   root.innerHTML = `
     <section class="auth-screen">
       <div class="auth-toolbar">
-        <p class="brand-mark">MAPLE NOTE</p>
+        <p class="brand-mark">Youl maple</p>
         <button class="icon-button" type="button" data-theme-toggle>다크 모드</button>
       </div>
       <div class="auth-card">
@@ -21,11 +22,11 @@ export function renderLogin(root) {
   root.innerHTML = `
     <section class="auth-screen">
       <div class="auth-toolbar">
-        <p class="brand-mark">MAPLE NOTE</p>
+        <p class="brand-mark">Youl maple</p>
         <button class="icon-button" type="button" data-theme-toggle>다크 모드</button>
       </div>
       <div class="auth-card">
-        <h1>메이플 노트</h1>
+        <h1>Youl maple</h1>
         <p>로그인한 계정만 내 데이터를 볼 수 있습니다.</p>
         <form id="auth-form">
           <label class="field">
@@ -38,23 +39,19 @@ export function renderLogin(root) {
           </label>
           <button class="primary-button" type="submit">로그인</button>
         </form>
-        <p class="form-message" role="status" hidden></p>
         <button class="text-button" type="button" data-switch-auth>계정이 없으면 가입</button>
       </div>
     </section>
   `;
 
   const form = root.querySelector("#auth-form");
-  const message = root.querySelector(".form-message");
   const switchButton = root.querySelector("[data-switch-auth]");
   const submitButton = form.querySelector(".primary-button");
   const password = form.elements.password;
   let mode = "login";
 
   function showMessage(text, kind) {
-    message.hidden = !text;
-    message.textContent = text;
-    message.className = `form-message is-${kind}`;
+    notify(text, kind);
   }
 
   function setMode(next) {

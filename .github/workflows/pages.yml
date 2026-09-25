@@ -49,8 +49,8 @@ jobs:
       - name: 공개할 파일만 모으기
         run: |
           mkdir -p _site
-          cp index.html .nojekyll _site/
-          cp -r css js _site/
+          cp index.html .nojekyll favicon.ico favicon-32x32.png apple-touch-icon.png _site/
+          cp -r css js img _site/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
