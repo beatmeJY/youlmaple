@@ -8,6 +8,7 @@ const blankQuest = {
   name: "",
   start_level: "",
   prerequisite: "",
+  materials: "",
   reward: "",
   exp_reward: "",
   meso_reward: "",
@@ -19,7 +20,7 @@ export async function render(root) {
   root.innerHTML = `
     <header class="page-header">
       <h1>퀘스트</h1>
-      <p>퀘스트 정보, 메모, 캐릭터별 완료 여부를 관리합니다.</p>
+      <p>필요 재료, 보상, 계정별 캐릭터 완료를 한 표에서 봅니다.</p>
     </header>
     <div class="page-toolbar">
       <button class="primary-button" type="button" data-add-quest>퀘스트 추가</button>
@@ -30,6 +31,7 @@ export async function render(root) {
       <label class="field"><span>퀘스트명</span><input name="name" required /></label>
       <label class="field"><span>시작 레벨</span><input name="start_level" inputmode="numeric" /></label>
       <label class="field"><span>선행 퀘스트</span><input name="prerequisite" /></label>
+      <label class="field"><span>필요 재료</span><textarea name="materials" placeholder="예: 달팽이 껍질 10"></textarea></label>
       <label class="field"><span>보상</span><input name="reward" /></label>
       <label class="field"><span>경험치</span><input name="exp_reward" inputmode="numeric" /></label>
       <label class="field"><span>메소</span><input name="meso_reward" inputmode="numeric" /></label>
@@ -65,7 +67,7 @@ export async function render(root) {
         </div>
       </form>
       <div data-notes></div>
-      <h3>캐릭터별 완료</h3>
+      <h3>이 퀘스트의 캐릭터 메모</h3>
       <div data-progress></div>
     </section>
   `;
@@ -90,10 +92,37 @@ export async function render(root) {
     status.className = `form-message is-${kind}`;
   }
 
-  function completionText(questId) {
-    if (!characters.length) return "등록된 캐릭터 없음";
-    const done = progress.filter((row) => row.quest_id === questId && row.completed).length;
-    return `완료 ${done}/${characters.length}`;
+  function accountLabel(character) {
+    const account = character.accounts;
+    const name = Array.isArray(account) ? account[0]?.name : account?.name;
+    return name || "계정 없음";
+  }
+
+  function characterGroups() {
+    const groups = new Map();
+    const sorted = [...characters].sort((a, b) => {
+      const byAccount = accountLabel(a).localeCompare(accountLabel(b), "ko");
+      if (byAccount) return byAccount;
+      return a.name.localeCompare(b.name, "ko");
+    });
+    for (const character of sorted) {
+      const label = accountLabel(character);
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(character);
+    }
+    return [...groups.entries()];
+  }
+
+  function rewardCell(quest) {
+    const lines = [];
+    if (quest.reward) lines.push(escapeHtml(quest.reward));
+    if (quest.exp_reward != null) lines.push(`경험치 ${escapeHtml(formatCount(quest.exp_reward))}`);
+    if (quest.meso_reward != null) lines.push(`메소 ${escapeHtml(formatCount(quest.meso_reward))}`);
+    return lines.length ? lines.join("<br>") : "-";
+  }
+
+  function isDone(questId, characterId) {
+    return progress.some((row) => row.quest_id === questId && row.character_id === characterId && row.completed);
   }
 
   function paintList() {
@@ -103,7 +132,7 @@ export async function render(root) {
     }
     const filtered = filterRows(quests, {
       query: root.querySelector("[data-search]").value,
-      fields: ["name"],
+      fields: ["name", "materials", "reward"],
       levelMode: "point",
       levelField: "start_level",
       filter: readLevelFilter(
@@ -119,25 +148,55 @@ export async function render(root) {
       list.innerHTML = `<p class="empty">검색 결과가 없습니다. 검색어나 레벨 범위를 바꿔 보세요.</p>`;
       return;
     }
-    list.innerHTML = `<div class="card-list">${filtered.rows
-      .map(
-        (quest) => `
-          <article class="card${quest.id === selectedId ? " is-selected" : ""}">
-            <h2>${escapeHtml(quest.name)}</h2>
-            <ul class="stat-list">
-              <li>시작 레벨 ${escapeHtml(formatCount(quest.start_level))}</li>
-              <li>중요도 ${escapeHtml(quest.importance || "-")}</li>
-              <li>${escapeHtml(completionText(quest.id))}</li>
-            </ul>
-            <div class="button-row">
-              <button class="secondary-button" type="button" data-open="${quest.id}">완료와 메모</button>
-              <button class="secondary-button" type="button" data-edit-quest="${quest.id}">수정</button>
-              <button class="danger-button" type="button" data-delete-quest="${quest.id}">삭제</button>
-            </div>
-          </article>
-        `,
-      )
-      .join("")}</div>`;
+    const questRows = [...filtered.rows].sort(
+      (a, b) => (a.start_level ?? 9999) - (b.start_level ?? 9999) || a.name.localeCompare(b.name, "ko"),
+    );
+    const groups = characterGroups();
+    const flatCharacters = groups.flatMap(([, members]) => members);
+    const groupHead = groups
+      .map(([name, members]) => `<th colspan="${members.length}">${escapeHtml(name)}</th>`)
+      .join("");
+    const characterHead = flatCharacters
+      .map((character) => `<th class="check-col">${escapeHtml(character.name)}</th>`)
+      .join("");
+    const fixedSpan = flatCharacters.length ? ` rowspan="2"` : "";
+    const head = `
+      <tr>
+        <th class="stick"${fixedSpan}>퀘스트</th>
+        <th class="num"${fixedSpan}>레벨</th>
+        <th${fixedSpan}>필요 재료</th>
+        <th${fixedSpan}>보상</th>
+        ${groupHead}
+        <th${fixedSpan}>작업</th>
+      </tr>
+      ${flatCharacters.length ? `<tr>${characterHead}</tr>` : ""}
+    `;
+    const body = questRows
+      .map((quest) => {
+        const checks = flatCharacters
+          .map((character) => {
+            const checked = isDone(quest.id, character.id) ? "checked" : "";
+            const label = `${quest.name} ${character.name} 완료`;
+            return `<td class="check-col"><input data-quest-check type="checkbox" data-quest-id="${quest.id}" data-character-id="${character.id}" aria-label="${escapeHtml(label)}" ${checked} /></td>`;
+          })
+          .join("");
+        const importance = quest.importance === "높음" ? `<span class="tag is-high">높음</span>` : "";
+        return `
+          <tr class="${quest.id === selectedId ? "is-selected" : ""}">
+            <td class="stick"><strong>${escapeHtml(quest.name)}</strong>${importance}</td>
+            <td class="num">${escapeHtml(formatCount(quest.start_level))}</td>
+            <td class="cell-wrap">${escapeHtml(quest.materials || "-")}</td>
+            <td class="cell-wrap">${rewardCell(quest)}</td>
+            ${checks}
+            <td><div class="row-actions"><button class="text-button" type="button" data-open="${quest.id}">메모</button><button class="text-button" type="button" data-edit-quest="${quest.id}">수정</button><button class="text-button is-danger" type="button" data-delete-quest="${quest.id}">삭제</button></div></td>
+          </tr>
+        `;
+      })
+      .join("");
+    const note = flatCharacters.length
+      ? ""
+      : `<p class="hint">캐릭터를 등록하면 표 오른쪽에 계정별 완료 체크가 생깁니다.</p>`;
+    list.innerHTML = `${note}<div class="table-wrap"><table class="data-table quest-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   }
 
   function paintNotes() {
@@ -173,10 +232,7 @@ export async function render(root) {
         );
         return `
           <div class="check-row" data-progress-row="${character.id}">
-            <label class="check-line">
-              <input data-completed type="checkbox" ${row?.completed ? "checked" : ""} />
-              <span>${escapeHtml(character.name)} · ${escapeHtml(character.server)}</span>
-            </label>
+            <strong>${escapeHtml(accountLabel(character))} · ${escapeHtml(character.name)}</strong>
             <label class="field">
               <span>이 캐릭터 메모</span>
               <input data-memo value="${escapeHtml(row?.memo || "")}" />
@@ -229,6 +285,7 @@ export async function render(root) {
         name,
         start_level: startLevel.value,
         prerequisite: questForm.elements.prerequisite.value.trim() || null,
+        materials: questForm.elements.materials.value.trim() || null,
         reward: questForm.elements.reward.value.trim() || null,
         exp_reward: expReward.value,
         meso_reward: mesoReward.value,
@@ -238,12 +295,12 @@ export async function render(root) {
     };
   }
 
-  async function saveProgress(characterId, completed, memo) {
+  async function saveProgress(questId, characterId, completed, memo, refresh = true) {
     const supabase = await getSupabase();
     const { error } = await supabase.from("character_quests").upsert(
       {
         character_id: characterId,
-        quest_id: selectedId,
+        quest_id: questId,
         completed,
         completed_at: completed ? new Date().toISOString() : null,
         memo: memo.trim() || null,
@@ -256,17 +313,17 @@ export async function render(root) {
     }
     const next = {
       character_id: characterId,
-      quest_id: selectedId,
+      quest_id: questId,
       completed,
       memo: memo.trim() || null,
     };
     const index = progress.findIndex(
-      (row) => row.character_id === characterId && row.quest_id === selectedId,
+      (row) => row.character_id === characterId && row.quest_id === questId,
     );
     if (index >= 0) progress[index] = next;
     else progress.push(next);
-    paintList();
-    showStatus("캐릭터별 완료 상태를 저장했습니다.", "info");
+    if (refresh) paintList();
+    showStatus(completed ? "완료로 저장했습니다." : "완료 상태를 저장했습니다.", "info");
     return true;
   }
 
@@ -305,10 +362,10 @@ export async function render(root) {
       supabase
         .from("quests")
         .select(
-          "id, name, start_level, prerequisite, reward, exp_reward, meso_reward, importance, memo, updated_at",
+          "id, name, start_level, prerequisite, materials, reward, exp_reward, meso_reward, importance, memo, updated_at",
         )
-        .order("updated_at", { ascending: false }),
-      supabase.from("characters").select("id, name, server").order("name"),
+        .order("start_level", { ascending: true }),
+      supabase.from("characters").select("id, name, server, account_id, accounts(name)").order("name"),
       supabase.from("character_quests").select("quest_id, character_id, completed, memo"),
     ]);
     if (current !== loadId || !list.isConnected) return;
@@ -405,23 +462,23 @@ export async function render(root) {
     if (!saveProgressButton) return;
     const characterId = saveProgressButton.dataset.saveProgress;
     const row = root.querySelector(`[data-progress-row="${characterId}"]`);
+    const existing = progress.find((item) => item.quest_id === selectedId && item.character_id === characterId);
     const saved = await saveProgress(
+      selectedId,
       characterId,
-      row.querySelector("[data-completed]").checked,
+      Boolean(existing?.completed),
       row.querySelector("[data-memo]").value,
     );
     if (!saved) return;
   });
 
   root.addEventListener("change", async (event) => {
-    const checkbox = event.target.closest("[data-completed]");
-    if (!checkbox || !selectedId) return;
-    const row = checkbox.closest("[data-progress-row]");
-    const saved = await saveProgress(
-      row.dataset.progressRow,
-      checkbox.checked,
-      row.querySelector("[data-memo]").value,
-    );
+    const checkbox = event.target.closest("[data-quest-check]");
+    if (!checkbox) return;
+    const questId = checkbox.dataset.questId;
+    const characterId = checkbox.dataset.characterId;
+    const existing = progress.find((item) => item.quest_id === questId && item.character_id === characterId);
+    const saved = await saveProgress(questId, characterId, checkbox.checked, existing?.memo || "", false);
     if (!saved) checkbox.checked = !checkbox.checked;
   });
 

@@ -39,7 +39,7 @@ export async function render(root) {
   notes.innerHTML = `<p class="empty">메모를 불러오는 중입니다.</p>`;
   const supabase = await getSupabase();
 
-  async function showRows(target, result, emptyText, toCard) {
+  async function showRows(target, result, emptyText, headers, toCard) {
     if (!target.isConnected) return;
     if (result.error) {
       target.innerHTML = `<p class="form-message is-error"></p>`;
@@ -50,7 +50,9 @@ export async function render(root) {
       target.innerHTML = `<p class="empty">${emptyText}</p>`;
       return;
     }
-    target.innerHTML = `<div class="card-list">${result.data.map(toCard).join("")}</div>`;
+    const head = headers.map((header) => `<th>${header}</th>`).join("");
+    const body = result.data.map(toCard).join("");
+    target.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
 
   const [characterResult, questResult, noteResult] = await Promise.all([
@@ -75,43 +77,40 @@ export async function render(root) {
     characters,
     characterResult,
     "아직 캐릭터가 없습니다. 캐릭터 메뉴에서 추가해 보세요.",
+    ["캐릭터", "계정", "서버", "직업", "레벨"],
     (row) => `
-      <article class="card">
-        <h3>${escapeHtml(row.name)}</h3>
-        <ul class="stat-list">
-          <li>계정 ${escapeHtml((Array.isArray(row.accounts) ? row.accounts[0] : row.accounts)?.name || "-")}</li>
-          <li>서버 ${escapeHtml(row.server)}</li>
-          <li>직업 ${escapeHtml(row.job || "-")}</li>
-          <li>레벨 ${escapeHtml(formatCount(row.level))}</li>
-        </ul>
-      </article>
+      <tr>
+        <td>${escapeHtml(row.name)}</td>
+        <td>${escapeHtml((Array.isArray(row.accounts) ? row.accounts[0] : row.accounts)?.name || "-")}</td>
+        <td>${escapeHtml(row.server)}</td>
+        <td>${escapeHtml(row.job || "-")}</td>
+        <td class="num">${escapeHtml(formatCount(row.level))}</td>
+      </tr>
     `,
   );
   await showRows(
     quests,
     questResult,
     "아직 퀘스트가 없습니다. 퀘스트 메뉴에서 추가해 보세요.",
+    ["퀘스트", "레벨", "중요도"],
     (row) => `
-      <article class="card">
-        <h3>${escapeHtml(row.name)}</h3>
-        <ul class="stat-list">
-          <li>시작 레벨 ${escapeHtml(formatCount(row.start_level))}</li>
-          <li>중요도 ${escapeHtml(row.importance || "-")}</li>
-        </ul>
-      </article>
+      <tr>
+        <td>${escapeHtml(row.name)}</td>
+        <td class="num">${escapeHtml(formatCount(row.start_level))}</td>
+        <td>${escapeHtml(row.importance || "-")}</td>
+      </tr>
     `,
   );
   await showRows(
     notes,
     noteResult,
     "아직 메모가 없습니다. 메모 메뉴에서 추가해 보세요.",
+    ["제목", "카테고리"],
     (row) => `
-      <article class="card">
-        <h3>${escapeHtml(row.title)}</h3>
-        <ul class="stat-list">
-          <li>카테고리 ${escapeHtml(row.category || "-")}</li>
-        </ul>
-      </article>
+      <tr>
+        <td>${escapeHtml(row.title)}</td>
+        <td>${escapeHtml(row.category || "-")}</td>
+      </tr>
     `,
   );
 }

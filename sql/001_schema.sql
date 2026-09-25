@@ -210,13 +210,15 @@ create table if not exists public.monsters (
   accuracy_per_level numeric,
   hp bigint,
   exp bigint,
+  hp_per_exp numeric,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint monsters_level_check check (level is null or level >= 1),
   constraint monsters_required_accuracy_check check (required_accuracy is null or required_accuracy >= 0),
   constraint monsters_accuracy_per_level_check check (accuracy_per_level is null or accuracy_per_level >= 0),
   constraint monsters_hp_check check (hp is null or hp >= 0),
-  constraint monsters_exp_check check (exp is null or exp >= 0)
+  constraint monsters_exp_check check (exp is null or exp >= 0),
+  constraint monsters_hp_per_exp_check check (hp_per_exp is null or hp_per_exp >= 0)
 );
 
 comment on table public.monsters is '몬스터';
@@ -225,6 +227,7 @@ comment on column public.monsters.required_accuracy is '필요 명중률';
 comment on column public.monsters.accuracy_per_level is '1레벨당 추가 필요 명중률';
 comment on column public.monsters.hp is '체력';
 comment on column public.monsters.exp is '경험치';
+comment on column public.monsters.hp_per_exp is '1 경험치 당 HP';
 
 create index if not exists monsters_user_name_idx on public.monsters (user_id, name);
 create index if not exists monsters_user_level_idx on public.monsters (user_id, level);
@@ -284,6 +287,7 @@ create table if not exists public.quests (
   name text not null,
   start_level integer,
   prerequisite text,
+  materials text,
   reward text,
   exp_reward bigint,
   meso_reward bigint,
@@ -301,6 +305,7 @@ create table if not exists public.quests (
 
 comment on table public.quests is '퀘스트 정보';
 comment on column public.quests.prerequisite is '선행 퀘스트';
+comment on column public.quests.materials is '필요 재료';
 comment on column public.quests.exp_reward is '경험치 보상';
 comment on column public.quests.meso_reward is '메소 보상';
 comment on column public.quests.importance is '높음, 보통, 낮음 중 하나';

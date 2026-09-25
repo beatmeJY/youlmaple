@@ -47,6 +47,7 @@ export async function renderRecords(root, options) {
       <label class="field"><span>${options.searchLabel}</span><input data-search placeholder="${options.searchPlaceholder}" /></label>
       ${levelFilters}
     </div>
+    ${options.extraHtml || ""}
     <div data-list></div>
   `;
 
@@ -105,6 +106,21 @@ export async function renderRecords(root, options) {
       list.innerHTML = `<p class="empty">검색 결과가 없습니다. 검색어나 레벨 범위를 바꿔 보세요.</p>`;
       return;
     }
+    if (options.sheet) {
+      const head = options.sheet
+        .map((column) => `<th class="${column.className || ""}">${column.label}</th>`)
+        .join("");
+      const body = filtered.rows
+        .map((row) => {
+          const cells = options.sheet
+            .map((column) => `<td class="${column.className || ""}">${column.cell(row)}</td>`)
+            .join("");
+          return `<tr>${cells}<td><div class="row-actions"><button class="text-button" type="button" data-edit="${row.id}">수정</button><button class="text-button is-danger" type="button" data-delete="${row.id}">삭제</button></div></td></tr>`;
+        })
+        .join("");
+      list.innerHTML = `<div class="table-wrap"><table class="data-table"><thead><tr>${head}<th>작업</th></tr></thead><tbody>${body}</tbody></table></div>`;
+      return;
+    }
     list.innerHTML = `<div class="card-list">${filtered.rows.map((row) => options.card(row)).join("")}</div>`;
   }
 
@@ -140,7 +156,7 @@ export async function renderRecords(root, options) {
     const { data, error } = await supabase
       .from(options.table)
       .select(options.columns)
-      .order(options.order, { ascending: false });
+      .order(options.order, { ascending: options.ascending ?? false });
     if (current !== loadId || !list.isConnected) return;
     if (error) {
       rows = [];
@@ -213,5 +229,6 @@ export async function renderRecords(root, options) {
     await loadRows();
   });
 
+  if (options.bind) options.bind({ root, reload: loadRows, showStatus });
   await loadRows();
 }

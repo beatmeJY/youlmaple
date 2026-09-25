@@ -24,7 +24,10 @@ export function translateDbError(error) {
     return "이 계정에 캐릭터가 있어서 삭제할 수 없습니다. 캐릭터를 먼저 삭제해 주세요.";
   }
   if (/monsters_level_check/i.test(raw)) return "몬스터 레벨은 1 이상이어야 합니다.";
-  if (/monsters_.*_check/i.test(raw)) return "명중률, 체력, 경험치는 0 이상이어야 합니다.";
+  if (/monsters_.*_check/i.test(raw)) return "명중률, 체력, 경험치, 1경험치당 HP는 0 이상이어야 합니다.";
+  if (/could not find the '(materials|hp_per_exp)' column/i.test(raw)) {
+    return "새 칸이 없습니다. Supabase SQL Editor에서 sql/005_glance_columns.sql 을 실행해 주세요.";
+  }
   if (/could not find the table|schema cache|does not exist/i.test(raw)) {
     return "표를 찾지 못했습니다. Supabase SQL Editor에서 sql/004_accounts_and_monsters.sql 을 실행해 주세요.";
   }

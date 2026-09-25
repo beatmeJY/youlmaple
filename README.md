@@ -41,6 +41,8 @@ Supabase SQL Editor에서 아래 순서대로 파일 전체를 붙여 넣고 Run
 
 이미 001과 002를 실행했다면, 그 파일을 다시 실행하지 말고 `sql/004_accounts_and_monsters.sql` 만 실행합니다.
 
+004까지 이미 실행했다면 `sql/005_glance_columns.sql` 만 실행합니다. 퀘스트 필요 재료와 몬스터의 1경험치당 HP 칸을 추가합니다.
+
 `anon` 행이 없고, 표마다 `rls_enabled` 가 true 이면 정상입니다.
 
 ## 로그인 연결

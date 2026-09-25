@@ -24,28 +24,23 @@ export async function render(root) {
   root.innerHTML = `
     <header class="page-header">
       <h1>캐릭터</h1>
-      <p>메이플 계정마다 캐릭터를 6명까지 등록합니다.</p>
+      <p>계정별로 나눠 서버, 직업, 레벨, 스공, 메소를 한 표에서 봅니다. 한 계정은 6명까지입니다.</p>
     </header>
-    <section>
-      <div class="page-toolbar">
-        <h2>계정</h2>
-        <button class="primary-button" type="button" data-add-account>계정 추가</button>
-      </div>
-      <form class="editor" id="account-form" hidden>
-        <h2 data-account-title>계정 추가</h2>
-        <label class="field"><span>계정 이름</span><input name="name" required placeholder="예: 본계정" /></label>
-        <div class="button-row">
-          <button class="primary-button" type="submit">저장</button>
-          <button class="secondary-button" type="button" data-cancel-account>취소</button>
-        </div>
-      </form>
-      <div data-accounts></div>
-    </section>
-    <section>
-      <div class="page-toolbar">
-        <h2>캐릭터</h2>
+    <div class="page-toolbar">
+      <h2>계정별 캐릭터</h2>
+      <div class="button-row">
+        <button class="secondary-button" type="button" data-add-account>계정 추가</button>
         <button class="primary-button" type="button" data-add>캐릭터 추가</button>
       </div>
+    </div>
+    <form class="editor" id="account-form" hidden>
+      <h2 data-account-title>계정 추가</h2>
+      <label class="field"><span>계정 이름</span><input name="name" required placeholder="예: 본계정" /></label>
+      <div class="button-row">
+        <button class="primary-button" type="submit">저장</button>
+        <button class="secondary-button" type="button" data-cancel-account>취소</button>
+      </div>
+    </form>
       <p class="form-message" data-status hidden></p>
       <form class="editor" id="character-form" hidden>
         <h2 data-form-title>캐릭터 추가</h2>
@@ -70,11 +65,9 @@ export async function render(root) {
         <label class="field"><span>레벨 최대</span><input data-level-max inputmode="numeric" /></label>
       </div>
       <div data-list></div>
-    </section>
   `;
 
   const list = root.querySelector("[data-list]");
-  const accountList = root.querySelector("[data-accounts]");
   const form = root.querySelector("#character-form");
   const accountForm = root.querySelector("#account-form");
   const status = root.querySelector("[data-status]");
@@ -91,10 +84,6 @@ export async function render(root) {
 
   function countFor(accountId, ignoreId = "") {
     return rows.filter((row) => row.account_id === accountId && row.id !== ignoreId).length;
-  }
-
-  function accountName(accountId) {
-    return accounts.find((account) => account.id === accountId)?.name || "계정 없음";
   }
 
   function fillAccountOptions(selectedId) {
@@ -130,37 +119,27 @@ export async function render(root) {
     form.reset();
   }
 
-  function paintAccounts() {
-    if (!accounts.length) {
-      accountList.innerHTML = `<p class="empty">계정이 없습니다. 계정 추가로 본계정, 부계정처럼 먼저 만들어 주세요.</p>`;
-      return;
-    }
-    accountList.innerHTML = `<div class="card-list">${accounts
-      .map((account) => {
-        const count = countFor(account.id);
-        const full = count >= 6;
-        return `
-          <article class="card">
-            <h3>${escapeHtml(account.name)}</h3>
-            <p>캐릭터 ${count}/6</p>
-            <div class="button-row">
-              <button class="secondary-button" type="button" data-add-character="${account.id}" ${full ? "disabled" : ""}>이 계정에 캐릭터 추가</button>
-              <button class="secondary-button" type="button" data-edit-account="${account.id}">이름 수정</button>
-              <button class="danger-button" type="button" data-delete-account="${account.id}">삭제</button>
-            </div>
-          </article>
-        `;
-      })
-      .join("")}</div>`;
+  function characterRow(row) {
+    const note = [row.gear_memo, row.extra_memo].filter(Boolean).join(" · ");
+    return `
+      <tr>
+        <td class="stick">
+          <strong>${escapeHtml(row.name)}</strong>
+          ${note ? `<span class="cell-note">${escapeHtml(note)}</span>` : ""}
+        </td>
+        <td>${escapeHtml(row.server)}</td>
+        <td>${escapeHtml(row.job || "-")}</td>
+        <td class="num">${escapeHtml(formatCount(row.level))}</td>
+        <td class="num">${escapeHtml(formatCount(row.combat_power))}</td>
+        <td class="num">${escapeHtml(formatCount(row.meso))}</td>
+        <td><div class="row-actions"><button class="text-button" type="button" data-edit="${row.id}">수정</button><button class="text-button is-danger" type="button" data-delete="${row.id}">삭제</button></div></td>
+      </tr>
+    `;
   }
 
   function paintList() {
     if (!accounts.length) {
-      list.innerHTML = "";
-      return;
-    }
-    if (!rows.length) {
-      list.innerHTML = `<p class="empty">등록한 캐릭터가 없습니다. 계정이 6명 미만이면 캐릭터를 추가할 수 있습니다.</p>`;
+      list.innerHTML = `<p class="empty">계정이 없습니다. 계정 추가로 본계정, 부계정처럼 먼저 만들어 주세요.</p>`;
       return;
     }
     const filtered = filterRows(rows, {
@@ -177,31 +156,43 @@ export async function render(root) {
       list.innerHTML = `<p class="empty">${filtered.error}</p>`;
       return;
     }
-    if (!filtered.rows.length) {
-      list.innerHTML = `<p class="empty">검색 결과가 없습니다. 검색어나 레벨 범위를 바꿔 보세요.</p>`;
-      return;
-    }
-    list.innerHTML = `<div class="card-list">${filtered.rows
-      .map(
-        (row) => `
-          <article class="card">
-            <h2>${escapeHtml(row.name)}</h2>
-            <ul class="stat-list">
-              <li>계정 ${escapeHtml(accountName(row.account_id))}</li>
-              <li>서버 ${escapeHtml(row.server)}</li>
-              <li>직업 ${escapeHtml(row.job || "-")}</li>
-              <li>레벨 ${escapeHtml(formatCount(row.level))}</li>
-              <li>스공 ${escapeHtml(formatCount(row.combat_power))}</li>
-              <li>메소 ${escapeHtml(formatCount(row.meso))}</li>
-            </ul>
-            <div class="button-row">
-              <button class="secondary-button" type="button" data-edit="${row.id}">수정</button>
-              <button class="danger-button" type="button" data-delete="${row.id}">삭제</button>
+    const searching = Boolean(
+      root.querySelector("[data-search]").value.trim() ||
+        root.querySelector("[data-level-min]").value.trim() ||
+        root.querySelector("[data-level-max]").value.trim(),
+    );
+    const blocks = accounts
+      .map((account) => {
+        const members = filtered.rows
+          .filter((row) => row.account_id === account.id)
+          .sort((a, b) => (b.level ?? -1) - (a.level ?? -1) || a.name.localeCompare(b.name, "ko"));
+        if (searching && !members.length) return "";
+        const count = countFor(account.id);
+        const full = count >= 6;
+        const body = members.length
+          ? members.map(characterRow).join("")
+          : `<tr><td colspan="7">이 계정에는 아직 캐릭터가 없습니다.</td></tr>`;
+        return `
+          <section class="account-block">
+            <div class="account-head">
+              <h2>${escapeHtml(account.name)} <span class="count-pill">${count}/6</span></h2>
+              <div class="button-row">
+                <button class="secondary-button" type="button" data-add-character="${account.id}" ${full ? "disabled" : ""}>캐릭터 추가</button>
+                <button class="text-button" type="button" data-edit-account="${account.id}">이름 수정</button>
+                <button class="text-button is-danger" type="button" data-delete-account="${account.id}">계정 삭제</button>
+              </div>
             </div>
-          </article>
-        `,
-      )
-      .join("")}</div>`;
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead><tr><th class="stick">캐릭터</th><th>서버</th><th>직업</th><th class="num">레벨</th><th class="num">스공</th><th class="num">메소</th><th>작업</th></tr></thead>
+                <tbody>${body}</tbody>
+              </table>
+            </div>
+          </section>
+        `;
+      })
+      .join("");
+    list.innerHTML = blocks || `<p class="empty">검색 결과가 없습니다. 검색어나 레벨 범위를 바꿔 보세요.</p>`;
   }
 
   async function loadCharacters() {
@@ -223,7 +214,6 @@ export async function render(root) {
     }
     accounts = accountResult.data ?? [];
     rows = characterResult.data ?? [];
-    paintAccounts();
     paintList();
   }
 
