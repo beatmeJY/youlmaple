@@ -117,6 +117,10 @@ export async function render(root) {
             <input type="checkbox" data-boss-ready-only />
             <span>도전할 수 있는 캐릭터만</span>
           </label>
+          <label class="boss-switch boss-soon-also">
+            <input type="checkbox" data-boss-soon-also />
+            <span>오늘·곧도 보기</span>
+          </label>
         </div>
       </div>
       <div data-list></div>
@@ -416,17 +420,19 @@ export async function render(root) {
     }
     const activeBosses = bosses.filter((boss) => bossFilters.has(boss.key));
     const readyOnly = readyOnlyChecked();
+    const includeSoon = soonAlsoChecked();
     const now = Date.now();
     const visibleRows =
-      activeBosses.length || readyOnly
-        ? filtered.rows.filter((row) => matchesBossFilter(row, activeBosses, readyOnly, now))
+      activeBosses.length || readyOnly || includeSoon
+        ? filtered.rows.filter((row) => matchesBossFilter(row, activeBosses, readyOnly, includeSoon, now))
         : filtered.rows;
     const searching = Boolean(
       root.querySelector("[data-search]").value.trim() ||
         root.querySelector("[data-level-min]").value.trim() ||
         root.querySelector("[data-level-max]").value.trim() ||
         activeBosses.length ||
-        readyOnly,
+        readyOnly ||
+        includeSoon,
     );
     const blocks = accounts
       .map((account) => {
@@ -455,39 +461,60 @@ export async function render(root) {
       })
       .join("");
     const bossText = activeBosses.map((boss) => boss.label).join(", ");
-    const bossEmpty = readyOnly
-      ? `지금 ${activeBosses.length ? `${bossText}에 ` : ""}도전할 수 있는 캐릭터가 없습니다.`
-      : `${bossText} 활성화 캐릭터가 없습니다.`;
+    const bossEmpty = bossEmptyMessage(bossText, readyOnly, includeSoon);
     list.innerHTML = blocks
       ? `<div class="character-accounts">${blocks}</div>`
       : `<p class="empty">${
-          activeBosses.length || readyOnly
+          activeBosses.length || readyOnly || includeSoon
             ? bossEmpty
             : searching
               ? "검색 결과가 없습니다. 검색어나 레벨 범위를 바꿔 보세요."
               : "이 서버에는 아직 캐릭터가 없습니다. 캐릭터 추가로 넣어 주세요."
         }</p>`;
-    readyKey = readyIds();
+    readyKey = attentionIds();
   }
 
   function readyOnlyChecked() {
     return Boolean(root.querySelector("[data-boss-ready-only]")?.checked);
   }
 
+  function soonAlsoChecked() {
+    return Boolean(root.querySelector("[data-boss-soon-also]")?.checked);
+  }
+
+  function bossEmptyMessage(bossText, readyOnly, includeSoon) {
+    const named = bossText ? `${bossText} ` : "";
+    if (readyOnly && includeSoon) return `지금 도전하거나 오늘·곧인 ${named}캐릭터가 없습니다.`;
+    if (readyOnly) return `지금 ${bossText ? `${bossText}에 ` : ""}도전할 수 있는 캐릭터가 없습니다.`;
+    if (includeSoon) return `오늘·곧인 ${named}캐릭터가 없습니다.`;
+    return `${bossText} 활성화 캐릭터가 없습니다.`;
+  }
+
   function canChallenge(row, boss, now = Date.now()) {
     return Boolean(row[boss.columnEnabled]) && bossState(row[boss.columnAt], now, boss).ready;
   }
 
-  function matchesBossFilter(row, activeBosses, readyOnly, now) {
-    const pool = activeBosses.length ? activeBosses : bosses;
-    return pool.some((boss) => (readyOnly ? canChallenge(row, boss, now) : Boolean(row[boss.columnEnabled])));
+  function isSoon(row, boss, now = Date.now()) {
+    return Boolean(row[boss.columnEnabled]) && bossState(row[boss.columnAt], now, boss).soon;
   }
 
-  function readyIds(now = Date.now()) {
-    if (!readyOnlyChecked() || !selectedServer) return "";
+  function matchesBossFilter(row, activeBosses, readyOnly, includeSoon, now) {
+    const pool = activeBosses.length ? activeBosses : bosses;
+    return pool.some((boss) => {
+      if (!row[boss.columnEnabled]) return false;
+      if (!readyOnly && !includeSoon) return true;
+      if (readyOnly && canChallenge(row, boss, now)) return true;
+      return includeSoon && isSoon(row, boss, now);
+    });
+  }
+
+  function attentionIds(now = Date.now()) {
+    const readyOnly = readyOnlyChecked();
+    const includeSoon = soonAlsoChecked();
+    if ((!readyOnly && !includeSoon) || !selectedServer) return "";
     const activeBosses = bosses.filter((boss) => bossFilters.has(boss.key));
     return rows
-      .filter((row) => row.server === selectedServer && matchesBossFilter(row, activeBosses, true, now))
+      .filter((row) => row.server === selectedServer && matchesBossFilter(row, activeBosses, readyOnly, includeSoon, now))
       .map((row) => row.id)
       .sort()
       .join(",");
@@ -557,6 +584,8 @@ export async function render(root) {
       }
       const readyOnly = root.querySelector("[data-boss-ready-only]");
       if (readyOnly) readyOnly.checked = false;
+      const soonAlso = root.querySelector("[data-boss-soon-also]");
+      if (soonAlso) soonAlso.checked = false;
     }
     accounts = sortByName(accountResult.data ?? []);
     jobs = jobResult.data ?? [];
@@ -602,7 +631,7 @@ export async function render(root) {
   });
 
   root.addEventListener("change", (event) => {
-    if (event.target.closest("[data-boss-ready-only]")) paintList();
+    if (event.target.closest("[data-boss-ready-only], [data-boss-soon-also]")) paintList();
   });
 
   root.addEventListener("submit", (event) => {
@@ -981,8 +1010,8 @@ export async function render(root) {
     }
     const now = Date.now();
     for (const button of list.querySelectorAll("[data-boss]")) paintBossButton(button, now);
-    if (!readyOnlyChecked() || !selectedServer) return;
-    const nextKey = readyIds(now);
+    if ((!readyOnlyChecked() && !soonAlsoChecked()) || !selectedServer) return;
+    const nextKey = attentionIds(now);
     if (nextKey === readyKey) return;
     readyKey = nextKey;
     paintList();

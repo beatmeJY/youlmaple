@@ -3269,7 +3269,8 @@ thead .stick {
   display: none;
 }
 
-.boss-ready-only {
+.boss-ready-only,
+.boss-soon-also {
   align-self: center;
 }
 
