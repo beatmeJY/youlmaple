@@ -92,8 +92,9 @@ function floorsTable() {
       ${bossTip}
       <div class="dojo-band-info">
         <span class="dojo-band-floor">${floorLabel}</span>
-        <span class="dojo-band-round">${roundLabel}</span>
+        <span class="dojo-band-round">(${roundLabel})</span>
         <span class="dojo-band-points" data-band-points="${band.start}"></span>
+        <span class="dojo-band-rate" data-band-rate="${band.start}" hidden></span>
       </div>
       <div class="dojo-band-controls">
         <label class="dojo-band-time">
@@ -179,14 +180,16 @@ export async function render(root) {
             <p class="dojo-bands-title">참고용 구간 초</p>
             ${floorsTable()}
           </div>
-          <div class="dojo-best is-empty" data-best>
-            <p class="dojo-best-kicker">최적 동선</p>
-            <p class="dojo-best-empty">구간 초를 모두 입력하면 여기에 정리됩니다.</p>
+          <div class="dojo-best-column">
+            <div class="dojo-best is-empty" data-best>
+              <p class="dojo-best-kicker">최적 동선</p>
+              <p class="dojo-best-empty">구간 초를 모두 입력하면 여기에 정리됩니다.</p>
+            </div>
+            <div class="button-row">
+              <button class="primary-button" type="submit" data-save>이 캐릭터 저장</button>
+              <button class="secondary-button" type="button" data-clear>입력 지우기</button>
+            </div>
           </div>
-        </div>
-        <div class="button-row">
-          <button class="primary-button" type="submit" data-save>이 캐릭터 저장</button>
-          <button class="secondary-button" type="button" data-clear>입력 지우기</button>
         </div>
       </div>
       </section>
@@ -664,33 +667,33 @@ export async function render(root) {
     const { hasActual = false, hasRecommend = false } = meta;
     const box = root.querySelector("[data-best]");
     if (!box) return;
-    if (!entry?.route) {
-      box.className = "dojo-best is-empty";
-      box.innerHTML = `
-        <div class="dojo-best-card">
-          <p class="dojo-best-kicker">최적 동선</p>
-          <p class="dojo-best-empty">구간 초를 모두 입력하면 여기에 정리됩니다.</p>
-        </div>
-      `;
-      return;
-    }
-    const { route, seconds, mode, score } = entry;
-    const path = route.saves?.length
-      ? route.saves
-          .map(
-            (round) =>
-              `<span class="dojo-best-step"><span class="dojo-best-chip">${saveFloorToFloor(round)}층</span><span class="dojo-best-round-note">${round}라운드</span></span>`,
-          )
-          .join(`<span class="dojo-best-arrow" aria-hidden="true">→</span>`)
-      : `<span class="dojo-best-chip">저장 안 함</span>`;
+    const route = entry?.route ?? null;
+    const seconds = entry?.seconds ?? null;
+    const mode = entry?.mode ?? (hasRecommend ? "recommend" : "actual");
+    const score = entry?.score ?? 0;
+    const hasRoute = Boolean(route);
+    const path = hasRoute
+      ? route.saves?.length
+        ? route.saves
+            .map(
+              (round) =>
+                `<span class="dojo-best-step"><span class="dojo-best-chip">${saveFloorToFloor(round)}층</span><span class="dojo-best-round-note">${round}라운드</span></span>`,
+            )
+            .join(`<span class="dojo-best-arrow" aria-hidden="true">→</span>`)
+        : `<span class="dojo-best-chip">저장 안 함</span>`
+      : `<span class="dojo-best-chip is-placeholder">-</span>`;
     const head = `<div class="dojo-best-tabs" role="tablist" aria-label="최적 동선 보기">
           <button type="button" class="dojo-best-tab is-actual${mode === "actual" ? " is-active" : ""}" data-best-view="actual" role="tab" aria-selected="${mode === "actual"}"${hasActual ? "" : " disabled"}>실제 기록</button>
           <button type="button" class="dojo-best-tab is-recommend${mode === "recommend" ? " is-active" : ""}" data-best-view="recommend" role="tab" aria-selected="${mode === "recommend"}"${hasRecommend ? "" : " disabled"}>추천 동선</button>
         </div>`;
-    const beltEta = beltText(route, seconds, score || 0);
-    const beltFull = beltText(route, seconds, 0);
-    const mesoHour = hourText(route, seconds);
-    box.className = `dojo-best is-${mode}`;
+    const beltEta = hasRoute ? beltText(route, seconds, score || 0) : "-";
+    const beltFull = hasRoute ? beltText(route, seconds, 0) : "-";
+    const mesoHour = hasRoute ? hourText(route, seconds) : "-";
+    const perSecond = hasRoute ? formatPointsPerSecond(route.points, seconds) : "-";
+    const perPoint = hasRoute ? formatSecondsPerPoint(route.points, seconds) : "-";
+    const duration = hasRoute ? formatDuration(seconds) : "-";
+    const totalPoints = hasRoute ? `${formatCount(route.points)}점` : "-";
+    box.className = `dojo-best is-${mode}${hasRoute ? "" : " is-empty"}`;
     box.innerHTML = `
       <div class="dojo-best-card">
         <div class="dojo-best-head">
@@ -714,21 +717,22 @@ export async function render(root) {
         <div class="dojo-best-stats">
           <div class="dojo-best-stat">
             <span>초당 점수</span>
-            <strong>${escapeHtml(formatPointsPerSecond(route.points, seconds))}</strong>
+            <strong>${escapeHtml(perSecond)}</strong>
           </div>
           <div class="dojo-best-stat">
             <span>점수당 초</span>
-            <strong>${escapeHtml(formatSecondsPerPoint(route.points, seconds))}</strong>
+            <strong>${escapeHtml(perPoint)}</strong>
           </div>
         </div>
         <div class="dojo-best-route">
           <p class="dojo-best-path">${path}</p>
           <p class="dojo-best-duration">
-            <span>소요 시간</span><strong>${escapeHtml(formatDuration(seconds))}</strong>
+            <span>소요 시간</span><strong>${escapeHtml(duration)}</strong>
             <span class="dojo-best-duration-sep" aria-hidden="true">·</span>
-            <span>점수</span><strong>${escapeHtml(formatCount(route.points))}점</strong>
+            <span>점수</span><strong>${escapeHtml(totalPoints)}</strong>
           </p>
         </div>
+        ${hasRoute ? "" : `<p class="dojo-best-empty-hint">구간 초를 모두 입력하면 채워집니다.</p>`}
       </div>
     `;
   }
@@ -759,12 +763,22 @@ export async function render(root) {
       const seconds = current.times.get(band.start);
       if (!row) continue;
       const input = row.querySelector("input");
+      const rate = row.querySelector("[data-band-rate]");
       if (!seconds) {
         input?.removeAttribute("title");
+        if (rate) {
+          rate.hidden = false;
+          rate.textContent = "초당 0점 · 점수당 0초";
+        }
         continue;
       }
       const points = bandPoints(band.start, party);
-      if (input) input.title = `초당 ${formatPointsPerSecond(points, seconds)} · 점수당 ${formatSecondsPerPoint(points, seconds)}`;
+      const rateText = `초당 ${formatPointsPerSecond(points, seconds)} · 점수당 ${formatSecondsPerPoint(points, seconds)}`;
+      if (input) input.title = rateText;
+      if (rate) {
+        rate.hidden = false;
+        rate.textContent = rateText;
+      }
     }
 
     const compared = compareSaves(current.times, party);
