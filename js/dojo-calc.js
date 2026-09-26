@@ -74,6 +74,25 @@ function bandStartAfter(saveFloor) {
   return BANDS.find((band) => band.start > saveFloor)?.start ?? null;
 }
 
+function pointsFromStart(start, party) {
+  const startIndex = BANDS.findIndex((band) => band.start === start);
+  if (startIndex < 0) return 0;
+  let points = 0;
+  for (let index = startIndex; index < BANDS.length; index += 1) {
+    points += bandPoints(BANDS[index].start, party);
+  }
+  return points;
+}
+
+export function chainPoints(party, saves) {
+  let points = pointsFromStart(1, party);
+  for (const saveFloor of saves ?? []) {
+    const start = bandStartAfter(saveFloor);
+    if (start != null) points += pointsFromStart(start, party);
+  }
+  return points;
+}
+
 function saveChains() {
   const chains = [[]];
   for (const floor of SAVE_FLOORS) {
@@ -238,9 +257,17 @@ export function formatSecondsPerPoint(points, seconds) {
   return formatRate(seconds / points, "초");
 }
 
+export function roundToFloor(round) {
+  return round + Math.floor((round - 1) / 5);
+}
+
+export function saveFloorToFloor(saveRound) {
+  return roundToFloor(saveRound) + 1;
+}
+
 export function saveText(saveFloor) {
   if (saveFloor == null) return "저장 안 함";
-  return `${saveFloor}층`;
+  return `${saveFloorToFloor(saveFloor)}층`;
 }
 
 export function chainKey(saves) {
@@ -261,10 +288,10 @@ export function measuredRoutes(times, party, runs) {
   const map = runs instanceof Map ? runs : readRuns(runs);
   const compared = compareSaves(times, party);
   const rows = compared.rows
-    .filter((row) => row.best && map.has(chainKey(row.best.saves)))
+    .filter((row) => map.has(chainKey(row.saves)))
     .map((row) => ({
-      route: row.best,
-      seconds: map.get(chainKey(row.best.saves)),
+      route: row.best ?? { points: chainPoints(party, row.saves), saves: row.saves, start: row.start, end: MAX_FLOOR },
+      seconds: map.get(chainKey(row.saves)),
     }))
     .sort((left, right) =>
       compareRoutes(
@@ -277,12 +304,21 @@ export function measuredRoutes(times, party, runs) {
 
 export function chainText(saves) {
   if (!saves?.length) return "저장 안 함";
-  return saves.map((floor) => `${floor}층`).join(" → ");
+  if (saves.length === SAVE_FLOORS.length) return "올저장";
+  return saves.map((floor) => `${saveFloorToFloor(floor)}층`).join(" → ");
+}
+
+export function spanParts(start, end) {
+  const floorStart = roundToFloor(start);
+  const floorEnd = roundToFloor(end);
+  const floorLabel = floorStart === floorEnd ? `${floorStart}층` : `${floorStart}~${floorEnd}층`;
+  const roundLabel = start === end ? `${start}라운드` : `${start}~${end}라운드`;
+  return { floorLabel, roundLabel };
 }
 
 export function spanText(start, end) {
-  if (start === end) return `${start}층`;
-  return `${start}~${end}층`;
+  const { floorLabel, roundLabel } = spanParts(start, end);
+  return `${floorLabel}(${roundLabel})`;
 }
 
 export function cycleText(route) {

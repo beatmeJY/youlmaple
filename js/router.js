@@ -4,6 +4,7 @@ const pages = {
   dashboard: () => import("./pages/dashboard.js"),
   characters: () => import("./pages/characters.js"),
   hunts: () => import("./pages/hunts.js"),
+  "level-plan": () => import("./pages/level-plan.js"),
   dojo: () => import("./pages/dojo.js"),
   monsters: () => import("./pages/monsters.js"),
   trades: () => import("./pages/trades.js"),
@@ -13,7 +14,7 @@ const pages = {
 };
 
 export function getRouteId() {
-  const id = location.hash.replace(/^#\/?/, "");
+  const id = location.hash.replace(/^#\/?/, "").split("?")[0];
   if (id === "items") return "trades";
   return pages[id] ? id : "dashboard";
 }

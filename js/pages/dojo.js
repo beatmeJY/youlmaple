@@ -8,6 +8,7 @@ import {
   SAVE_SECONDS,
   bandPoints,
   beltById,
+  chainPoints,
   chainText,
   compareRoutes,
   compareSaves,
@@ -20,6 +21,8 @@ import {
   quoteBlackBelt,
   readRuns,
   chainKey,
+  saveFloorToFloor,
+  spanParts,
   spanText,
 } from "../dojo-calc.js";
 import { escapeHtml, formatCount, readBig, readCount, sortByName } from "../format.js";
@@ -39,20 +42,55 @@ function formatWhen(value) {
   }).format(date);
 }
 
+const BELT_ICONS = {
+  white: "img/dojo-belt-white.png",
+  yellow: "img/dojo-belt-yellow.png",
+  blue: "img/dojo-belt-blue.png",
+  red: "img/dojo-belt-red.png",
+  black: "img/dojo-belt-black.png",
+};
+
+/** 상세 옵션 호버 이미지 */
+const BELT_DETAILS = {
+  white: "img/dojo-belt-white-detail.png",
+  yellow: "img/dojo-belt-yellow-detail.png",
+  blue: "img/dojo-belt-blue-detail.png",
+  red: "img/dojo-belt-red-detail.png",
+  black: "img/dojo-belt-black-detail.png",
+};
+
 function beltName(id) {
   return beltById(id)?.name ?? id;
 }
 
 function beltLabel(belt) {
-  return `<span class="dojo-belt"><span class="dojo-swatch is-${escapeHtml(belt.id)}"></span>${escapeHtml(belt.name)}</span>`;
+  const icon = BELT_ICONS[belt.id] || "";
+  const detail = BELT_DETAILS[belt.id] || "";
+  const iconHtml = icon
+    ? `<span class="dojo-belt-icon${detail ? " has-detail" : ""}"${detail ? ` tabindex="0" data-belt-detail="${escapeHtml(detail)}" aria-label="${escapeHtml(belt.name)} 상세 옵션"` : ""}><img src="${escapeHtml(icon)}" alt="" width="36" height="36" decoding="async" /></span>`
+    : `<span class="dojo-swatch is-${escapeHtml(belt.id)}"></span>`;
+  return `<span class="dojo-belt">${iconHtml}<span class="dojo-belt-copy"><span class="dojo-belt-name">${escapeHtml(belt.name)}</span><span class="hint">${escapeHtml(formatCount(belt.score))}점</span></span></span>`;
 }
+
+const BAND_BOSS_NOTES = {
+  6: "10층 타이머 스턴 유의",
+  11: "12층 파파픽시 실명, 스킬잠금 유의",
+  16: "19층 구미호 실명 / 21층 포이즌골렘 스킬잠금, 실명, 키반대 유의",
+  21: "26층 프랑켄로이드 실명, 스킬잠금 유의 / 29층 스노우맨 스턴 유의",
+};
 
 function floorsTable() {
   return BANDS.map((band) => {
     const label = spanText(band.start, band.end);
-    const saveTitle = SAVE_FLOORS.includes(band.end) ? ` title="${band.end}층에서 저장"` : "";
+    const { floorLabel, roundLabel } = spanParts(band.start, band.end);
+    const saveTitle = SAVE_FLOORS.includes(band.end) ? ` title="${saveFloorToFloor(band.end)}층(쉬는 층)에서 저장"` : "";
+    const bossNote = BAND_BOSS_NOTES[band.start];
+    const bossTip = bossNote
+      ? `<div class="dojo-band-boss-tip" data-band-boss hidden role="status">${escapeHtml(bossNote)}</div>`
+      : "";
     return `<div class="dojo-band" data-band-row="${band.start}"${saveTitle}>
-      <span class="dojo-band-name">${label}<span class="dojo-band-meta" data-band-points="${band.start}"></span></span>
+      ${bossTip}
+      <span class="dojo-band-name"><span class="dojo-band-floor">${floorLabel}</span><span class="dojo-band-round">(${roundLabel})</span><span class="dojo-band-meta" data-band-points="${band.start}"></span></span>
       <label class="dojo-band-time">
         <input name="band_${band.start}" inputmode="numeric" autocomplete="off" aria-label="${label} 초" />
         <span>초</span>
@@ -83,8 +121,7 @@ export async function render(root) {
       <h1>무릉도장</h1>
     </header>
     <section class="dojo-frame dojo-belts">
-      <div class="dojo-belts-head"><span>허리띠 시세</span></div>
-      <p class="hint">공용 시세입니다. 가격을 적으면 아래에 쌓입니다.</p>
+      <div class="dojo-belts-head"><span>허리띠 시세</span><span class="dojo-belts-hint">공용 시세입니다. 가격을 적으면 아래에 쌓입니다.</span></div>
       <div data-belts></div>
     </section>
     <section class="dojo-cast">
@@ -109,7 +146,7 @@ export async function render(root) {
       <div class="editor">
         <details class="dojo-note span-all">
           <summary>계산 기준</summary>
-          <p class="hint">구간 전체를 깨는 초를 적습니다. 개인은 1~5층이 층마다 2점, 팀은 1점입니다. 5, 10, 15, 20, 25층에서 저장할 수 있고, 이어서 더 위쪽 5층 단위에 다시 저장할 수 있습니다. 저장 한 번에 참고 시간 ${SAVE_SECONDS}초를 더합니다. 하루 최대 3,500점이고, 검은 허리띠는 17,000점입니다.</p>
+          <p class="hint">구간 전체를 깨는 초를 적습니다. 층에는 쉬는 층도 포함되어 있어서, 5라운드를 마칠 때마다 나오는 쉬는 층(${SAVE_FLOORS.map((floor) => `${saveFloorToFloor(floor)}층`).join(", ")})에서 저장할 수 있고, 이어서 5라운드 단위로 다시 저장할 수 있습니다. 개인은 1~5층(1~5라운드)이 층마다 2점, 팀은 1점입니다. 저장 한 번에 참고 시간 ${SAVE_SECONDS}초를 더합니다. 하루 최대 3,500점이고, 검은 허리띠는 17,000점입니다.</p>
         </details>
         <div class="dojo-fields">
           <label class="field dojo-field-character"><span>캐릭터</span>
@@ -117,17 +154,19 @@ export async function render(root) {
               <option value="">캐릭터 선택</option>
             </select>
           </label>
-          <label class="field dojo-field-party"><span>방식</span>
-            <select name="party">
-              <option value="solo">개인</option>
-              <option value="team">팀</option>
-            </select>
-          </label>
+          <div class="field dojo-field-party">
+            <span>방식</span>
+            <div class="dojo-party-toggle" role="group" aria-label="개인 또는 팀">
+              <button type="button" class="dojo-party-btn is-solo is-active" data-party-choice="solo" aria-pressed="true">개인</button>
+              <button type="button" class="dojo-party-btn is-team" data-party-choice="team" aria-pressed="false">팀</button>
+            </div>
+            <input type="hidden" name="party" value="solo" />
+          </div>
           <label class="field dojo-field-score"><span>지금 점수</span><input name="score" inputmode="numeric" autocomplete="off" placeholder="없으면 0" /></label>
         </div>
         <div class="dojo-split">
           <div class="dojo-bands">
-            <p class="dojo-bands-title">구간 초</p>
+            <p class="dojo-bands-title">참고용 구간 초</p>
             ${floorsTable()}
           </div>
           <div class="dojo-best is-empty" data-best>
@@ -153,6 +192,18 @@ export async function render(root) {
   const belts = root.querySelector("[data-belts]");
   const records = root.querySelector("[data-records]");
   const plan = root.querySelector("[data-plan]");
+  let beltTip = document.getElementById("dojo-belt-tip");
+  if (!beltTip) {
+    beltTip = document.createElement("div");
+    beltTip.id = "dojo-belt-tip";
+    beltTip.className = "dojo-belt-tip";
+    beltTip.hidden = true;
+    beltTip.setAttribute("aria-hidden", "true");
+    beltTip.innerHTML = `<img alt="" decoding="async" />`;
+    document.body.appendChild(beltTip);
+  }
+  const beltTipImg = beltTip.querySelector("img");
+  let beltTipIcon = null;
   let characters = [];
   let accounts = [];
   let draftRuns = new Map();
@@ -160,7 +211,7 @@ export async function render(root) {
   let bandPending = null;
   let routePending = null;
   let clockTimer = 0;
-  let clockTarget = "";
+  let clockTarget = null;
   let clockPressed = false;
   let landedKey = "";
   let arriveCard = false;
@@ -170,9 +221,26 @@ export async function render(root) {
   let recordRows = [];
   let loadId = 0;
   let saving = false;
+  let bestView = "actual";
 
   function partyOf() {
     return form.elements.party.value === "team";
+  }
+
+  function syncPartyButtons() {
+    const value = form.elements.party.value;
+    for (const button of form.querySelectorAll("[data-party-choice]")) {
+      const on = button.dataset.partyChoice === value;
+      button.classList.toggle("is-active", on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+
+  function setParty(value) {
+    if (form.elements.party.value === value) return;
+    form.elements.party.value = value;
+    syncPartyButtons();
+    form.elements.party.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   function snapshot() {
@@ -290,7 +358,9 @@ export async function render(root) {
   function routeForKey(key) {
     const current = floorsOf();
     if (current.error) return null;
-    return compareSaves(current.times, current.party).rows.find((row) => row.best && chainKey(row.best.saves) === key)?.best ?? null;
+    const row = compareSaves(current.times, current.party).rows.find((item) => chainKey(item.saves) === key);
+    if (!row) return null;
+    return row.best ?? { points: chainPoints(current.party, row.saves) };
   }
 
   function hourText(route, seconds) {
@@ -356,6 +426,8 @@ export async function render(root) {
       const readout = row.querySelector("[data-band-time]");
       const start = row.querySelector("[data-band-start]");
       const stop = row.querySelector("[data-band-stop]");
+      const bossTip = row.querySelector("[data-band-boss]");
+      if (bossTip) bossTip.hidden = !on;
       if (readout) {
         readout.hidden = !on && !pending;
         if (on) readout.textContent = formatStopwatch(Date.now() - clock.startedAt);
@@ -369,8 +441,8 @@ export async function render(root) {
   function startClock() {
     if (clock?.scope === "band" || bandPending || routePending) return;
     const select = plan.querySelector("[data-clock-target]");
-    const key = select?.value || clockTarget;
-    if (!key) return;
+    const key = select ? select.value : clockTarget;
+    if (key == null) return;
     clockTarget = key;
     clock = { scope: "route", key, startedAt: Date.now() };
     window.clearInterval(clockTimer);
@@ -459,14 +531,13 @@ export async function render(root) {
   }
 
   function timerBar(items) {
-    const options = items
-      .map((item) => ({
-        key: chainKey(item.row.best.saves),
-        label: chainText(item.row.best.saves),
-      }))
-      .filter((item) => item.key);
-    if (routePending) clockTarget = routePending.key;
-    else if (!options.some((item) => item.key === clockTarget)) clockTarget = options[0]?.key || "";
+    const options = items.map((item) => ({
+      key: chainKey(item.row.saves),
+      label: chainText(item.row.saves),
+    }));
+    if (!options.some((item) => item.key === clockTarget)) {
+      clockTarget = routePending ? routePending.key : (options[0]?.key ?? null);
+    }
     const running = clock?.scope === "route";
     const pending = Boolean(routePending);
     const busy = Boolean(clock) || Boolean(bandPending) || pending;
@@ -482,13 +553,13 @@ export async function render(root) {
       )
       .join("");
     return `<div class="dojo-timer${running ? " is-running" : ""}${pending ? " is-pending" : ""}">
-      <label class="dojo-timer-target"><span>저장 방법</span><select data-clock-target${running || pending ? " disabled" : ""}>${choices}</select></label>
+      <label class="dojo-timer-target"><span>저장 방법</span><select data-clock-target${running ? " disabled" : ""}>${choices}</select></label>
       <span class="dojo-stopwatch${running ? " is-running" : ""}"><span class="dojo-stopwatch-time" data-clock-time>${time}</span></span>
       <button class="dojo-stopwatch-btn" type="button" data-clock-start${busy ? " disabled" : ""}>시작</button>
       <button class="dojo-stopwatch-btn" type="button" data-clock-stop${running ? "" : " disabled"}>종료</button>
       <button class="dojo-stopwatch-btn" type="button" data-clock-apply>반영</button>
       <button class="dojo-stopwatch-btn" type="button" data-clock-reset>초기화</button>
-      <button class="dojo-stopwatch-btn dojo-timer-save" type="button" data-save-clock${running || !clockTarget ? " disabled" : ""}>저장</button>
+      <button class="dojo-stopwatch-btn dojo-timer-save" type="button" data-save-clock${running || clockTarget == null ? " disabled" : ""}>저장</button>
     </div>`;
   }
 
@@ -545,19 +616,8 @@ export async function render(root) {
     </div>`;
   }
 
-  function emptyPlan() {
-    const cells = ["is-save", "is-score", "is-ref-time", "is-ref-rate", "is-ref-point", "is-act-time", "is-act-rate", "is-act-point", "is-belt", "is-hour"]
-      .map((name) => `<span class="dojo-cell ${name}"></span>`)
-      .join("");
-    return `<div class="dojo-board">
-      <div class="dojo-plan is-blank">
-        ${planHead()}
-        <div class="dojo-plan-row is-blank">${cells}<p class="dojo-plan-note">위에 입력하면 표가 나옵니다.</p></div>
-      </div>
-    </div>`;
-  }
-
-  function paintBest(entry) {
+  function paintBest(entry, meta = {}) {
+    const { hasActual = false, hasRecommend = false } = meta;
     const box = root.querySelector("[data-best]");
     if (!box) return;
     if (!entry?.route) {
@@ -572,19 +632,25 @@ export async function render(root) {
     }
     const { route, seconds, mode, score } = entry;
     const path = route.saves?.length
-      ? route.saves.map((floor) => `<span class="dojo-best-chip">${floor}층</span>`).join(`<span class="dojo-best-arrow" aria-hidden="true">→</span>`)
+      ? route.saves
+          .map(
+            (round) =>
+              `<span class="dojo-best-step"><span class="dojo-best-chip">${saveFloorToFloor(round)}층</span><span class="dojo-best-round-note">${round}라운드</span></span>`,
+          )
+          .join(`<span class="dojo-best-arrow" aria-hidden="true">→</span>`)
       : `<span class="dojo-best-chip">저장 안 함</span>`;
-    const badge = mode === "actual"
-      ? `<span class="dojo-best-badge is-actual">실제 기록</span>`
-      : `<span class="dojo-best-badge is-recommend">추천</span>`;
+    const head = `<div class="dojo-best-tabs" role="tablist" aria-label="최적 동선 보기">
+          <button type="button" class="dojo-best-tab is-actual${mode === "actual" ? " is-active" : ""}" data-best-view="actual" role="tab" aria-selected="${mode === "actual"}"${hasActual ? "" : " disabled"}>실제 기록</button>
+          <button type="button" class="dojo-best-tab is-recommend${mode === "recommend" ? " is-active" : ""}" data-best-view="recommend" role="tab" aria-selected="${mode === "recommend"}"${hasRecommend ? "" : " disabled"}>추천 동선</button>
+        </div>`;
     const beltEta = beltText(route, seconds, score || 0);
     const mesoHour = hourText(route, seconds);
     box.className = `dojo-best is-${mode}`;
     box.innerHTML = `
       <div class="dojo-best-card">
         <div class="dojo-best-head">
-          ${badge}
           <p class="dojo-best-kicker">최적 동선</p>
+          ${head}
         </div>
         <p class="dojo-best-path">${path}</p>
         <p class="dojo-best-score">${escapeHtml(formatCount(route.points))}<span>점</span></p>
@@ -653,22 +719,29 @@ export async function render(root) {
     }
 
     const compared = compareSaves(current.times, party);
-    if (!compared.best) {
-      paintBest(null);
-      plan.innerHTML = emptyPlan();
-      return;
-    }
     const measured = measuredRoutes(current.times, party, draftRuns);
-    if (measured.best) {
-      paintBest({ mode: "actual", route: measured.best.route, seconds: measured.best.seconds, score: current.score });
-    } else {
-      paintBest({ mode: "recommend", route: compared.best, seconds: compared.best.seconds, score: current.score });
-    }
+    const recommendEntry = compared.best
+      ? { mode: "recommend", route: compared.best, seconds: compared.best.seconds, score: current.score }
+      : null;
+    const actualEntry = measured.best
+      ? { mode: "actual", route: measured.best.route, seconds: measured.best.seconds, score: current.score }
+      : null;
+    const hasActual = !!actualEntry;
+    const hasRecommend = !!recommendEntry;
+    const preferRecommend = bestView === "recommend" && hasRecommend;
+    const shown = preferRecommend ? recommendEntry : hasActual ? actualEntry : recommendEntry;
+    paintBest(shown, { hasActual, hasRecommend });
 
     const ranked = compared.rows
-      .filter((row) => row.best)
-      .map((row) => ({ row, actual: draftRuns.get(chainKey(row.best.saves)) ?? null }))
+      .map((row) => ({
+        row,
+        points: row.best ? row.best.points : chainPoints(party, row.saves),
+        actual: draftRuns.get(chainKey(row.saves)) ?? null,
+      }))
       .sort((left, right) => {
+        if (!left.row.best && !right.row.best) return left.row.saves.length - right.row.saves.length;
+        if (!left.row.best) return 1;
+        if (!right.row.best) return -1;
         if ((left.actual == null) !== (right.actual == null)) return left.actual == null ? 1 : -1;
         if (left.actual != null) {
           return compareRoutes(
@@ -678,36 +751,63 @@ export async function render(root) {
         }
         return compareRoutes(left.row.best, right.row.best);
       });
-    const route = compared.best;
-    for (const band of BANDS) {
-      const row = root.querySelector(`[data-band-row="${band.start}"]`);
-      const count = route.runs.filter((run) => band.start >= run.start).length;
-      if (count > 0) row?.classList.add("is-in-route");
+    if (compared.best) {
+      for (const band of BANDS) {
+        const row = root.querySelector(`[data-band-row="${band.start}"]`);
+        const count = compared.best.runs.filter((run) => band.start >= run.start).length;
+        if (count > 0) row?.classList.add("is-in-route");
+      }
     }
     const body = ranked
       .map((item, index) => {
-        const key = chainKey(item.row.best.saves);
-        const label = chainText(item.row.best.saves);
+        const key = chainKey(item.row.saves);
+        const label = chainText(item.row.saves);
+        const hasRef = Boolean(item.row.best);
         const [minutes, seconds] = item.actual == null ? ["", ""] : [String(Math.floor(item.actual / 60)), String(item.actual % 60)];
-        const liveRate = item.actual == null ? "-" : formatPointsPerSecond(item.row.best.points, item.actual);
-        const livePoint = item.actual == null ? "-" : formatSecondsPerPoint(item.row.best.points, item.actual);
-        const liveBelt = beltText(item.row.best, item.actual, current.score);
-        const routeLabel = item.row.best.saves?.length
-          ? item.row.best.saves.map((floor) => `<span>${floor}층</span>`).join('<span class="dojo-join"> → </span>')
-          : escapeHtml(label);
+        const liveRate = item.actual == null ? "-" : formatPointsPerSecond(item.points, item.actual);
+        const livePoint = item.actual == null ? "-" : formatSecondsPerPoint(item.points, item.actual);
+        const liveBelt = item.actual == null ? "-" : beltText({ points: item.points }, item.actual, current.score);
+        const liveHour = item.actual == null ? "-" : hourText({ points: item.points }, item.actual);
+        const refTime = hasRef ? formatDuration(item.row.best.seconds) : "-";
+        const refRate = hasRef ? formatPointsPerSecond(item.points, item.row.best.seconds) : "-";
+        const refPoint = hasRef ? formatSecondsPerPoint(item.points, item.row.best.seconds) : "-";
+        let routeLabel;
+        if (item.row.saves?.length === SAVE_FLOORS.length) {
+          routeLabel = escapeHtml(label);
+        } else if (item.row.saves?.length) {
+          const columns = item.row.saves.length * 2 - 1;
+          const floorCells = item.row.saves
+            .map((round, floorIndex) => {
+              const column = floorIndex * 2 + 1;
+              const arrow = floorIndex < item.row.saves.length - 1
+                ? `<span class="dojo-save-arrow" style="grid-column:${column + 1}" aria-hidden="true">→</span>`
+                : "";
+              return `<span class="dojo-save-floor" style="grid-column:${column}">${saveFloorToFloor(round)}층</span>${arrow}`;
+            })
+            .join("");
+          const numCells = item.row.saves
+            .map((round, floorIndex) => `<span class="dojo-save-round-num" style="grid-column:${floorIndex * 2 + 1}">${round}</span>`)
+            .join("");
+          const labelCells = item.row.saves
+            .map((round, floorIndex) => `<span class="dojo-save-round-label" style="grid-column:${floorIndex * 2 + 1}">라운드</span>`)
+            .join("");
+          routeLabel = `<span class="dojo-save-grid" style="grid-template-columns:repeat(${columns}, auto)">${floorCells}${numCells}${labelCells}</span>`;
+        } else {
+          routeLabel = escapeHtml(label);
+        }
         const timing = clock?.scope === "route" && clock.key === key ? " is-timing" : "";
         const landed = landedKey === key ? " is-landed" : "";
         return `<div class="dojo-plan-row${index === 0 ? " is-selected" : ""}${timing}${landed}" data-chain="${escapeHtml(key)}">
           <span class="dojo-cell is-save"><span class="dojo-value">${routeLabel}</span></span>
-          <span class="dojo-cell is-score"><span class="dojo-value">${escapeHtml(formatCount(item.row.best.points))}점</span></span>
-          <span class="dojo-cell is-ref-time"><span class="dojo-tag">참고</span><span class="dojo-value">${escapeHtml(formatDuration(item.row.best.seconds))}</span></span>
-          <span class="dojo-cell is-ref-rate"><span class="dojo-tag">참고</span><span class="dojo-value">${escapeHtml(formatPointsPerSecond(item.row.best.points, item.row.best.seconds))}</span></span>
-          <span class="dojo-cell is-ref-point"><span class="dojo-tag">참고</span><span class="dojo-value">${escapeHtml(formatSecondsPerPoint(item.row.best.points, item.row.best.seconds))}</span></span>
+          <span class="dojo-cell is-score"><span class="dojo-value">${escapeHtml(formatCount(item.points))}점</span></span>
+          <span class="dojo-cell is-ref-time"><span class="dojo-tag">참고</span><span class="dojo-value">${escapeHtml(refTime)}</span></span>
+          <span class="dojo-cell is-ref-rate"><span class="dojo-tag">참고</span><span class="dojo-value">${escapeHtml(refRate)}</span></span>
+          <span class="dojo-cell is-ref-point"><span class="dojo-tag">참고</span><span class="dojo-value">${escapeHtml(refPoint)}</span></span>
           <span class="dojo-cell is-act-time"><span class="dojo-tag">실제</span><span class="dojo-line dojo-actual"><span class="dojo-clock"><input class="dojo-run" data-run-key="${escapeHtml(key)}" data-run-part="min" inputmode="numeric" autocomplete="off" aria-label="${escapeHtml(label)} 분" value="${escapeHtml(minutes)}" /><span>분</span></span><span class="dojo-clock"><input class="dojo-run" data-run-key="${escapeHtml(key)}" data-run-part="sec" inputmode="numeric" autocomplete="off" aria-label="${escapeHtml(label)} 초" value="${escapeHtml(seconds)}" /><span>초</span></span></span></span>
           <span class="dojo-cell is-act-rate"><span class="dojo-tag">실제</span><span class="dojo-value" data-live="rate">${escapeHtml(liveRate)}</span></span>
           <span class="dojo-cell is-act-point"><span class="dojo-tag">실제</span><span class="dojo-value" data-live="point">${escapeHtml(livePoint)}</span></span>
           <span class="dojo-cell is-belt"><span class="dojo-value" data-live="belt">${escapeHtml(liveBelt)}</span></span>
-          <span class="dojo-cell is-hour"><span class="dojo-value" data-live="hour">${escapeHtml(hourText(item.row.best, item.actual))}</span></span>
+          <span class="dojo-cell is-hour"><span class="dojo-value" data-live="hour">${escapeHtml(liveHour)}</span></span>
         </div>`;
       })
       .join("");
@@ -740,10 +840,52 @@ export async function render(root) {
     };
   }
 
+  function hideBeltTip() {
+    beltTipIcon = null;
+    beltTip.hidden = true;
+    beltTip.classList.remove("is-open");
+    beltTip.dataset.active = "";
+    beltTipImg.removeAttribute("src");
+    beltTipImg.alt = "";
+  }
+
+  function placeBeltTip(icon) {
+    const rect = icon.getBoundingClientRect();
+    const tip = beltTip.getBoundingClientRect();
+    let left = rect.right + 12;
+    let top = rect.top + rect.height / 2 - tip.height / 2;
+    if (left + tip.width > window.innerWidth - 8) left = Math.max(8, rect.left - tip.width - 12);
+    if (top < 8) top = 8;
+    if (top + tip.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - tip.height - 8);
+    beltTip.style.left = `${Math.round(left)}px`;
+    beltTip.style.top = `${Math.round(top)}px`;
+  }
+
+  function showBeltTip(icon) {
+    const src = icon.dataset.beltDetail;
+    if (!src) return;
+    const same = beltTipIcon === icon && beltTip.dataset.active === src && !beltTip.hidden;
+    beltTipIcon = icon;
+    beltTip.dataset.active = src;
+    if (!same) {
+      beltTipImg.src = src;
+      beltTipImg.alt = icon.getAttribute("aria-label") || "";
+    }
+    beltTip.hidden = false;
+    beltTip.classList.add("is-open");
+    placeBeltTip(icon);
+    if (!beltTipImg.complete) {
+      beltTipImg.addEventListener("load", () => {
+        if (beltTipIcon === icon) placeBeltTip(icon);
+      }, { once: true });
+    }
+  }
+
   function paintBelts() {
+    hideBeltTip();
     const body = BELTS.map((belt) => {
       const history = priceRows.filter((row) => row.belt === belt.id);
-      const name = `<td rowspan="${Math.max(history.length, 1)}">${beltLabel(belt)}<div class="hint">${escapeHtml(formatCount(belt.score))}점</div></td>`;
+      const name = `<td rowspan="${Math.max(history.length, 1)}">${beltLabel(belt)}</td>`;
       if (!history.length) {
         return `<tr>${name}<td colspan="3">아직 시세가 없습니다.</td><td>${priceEditor(belt)}</td></tr>`;
       }
@@ -791,6 +933,7 @@ export async function render(root) {
         const perSecond = actual ? formatPointsPerSecond(actual.route.points, actual.seconds) : "-";
         const perPoint = actual ? formatSecondsPerPoint(actual.route.points, actual.seconds) : "-";
         const belt = !actual ? "-" : beltText(actual.route, actual.seconds, row.score || 0);
+        const beltFull = !actual ? "-" : beltText(actual.route, actual.seconds, 0);
         const hour = !actual ? "-" : hourText(actual.route, actual.seconds);
         const popped = arriveCard && selected ? " is-pop" : "";
         const face = faceMarkup(characters.find((item) => item.id === row.character_id)?.face_url);
@@ -800,11 +943,11 @@ export async function render(root) {
             ${face}
             <h3>${escapeHtml(row.character_name)}</h3>
             ${picked}
-            <span class="dojo-mode">${row.party ? "팀" : "개인"}</span>
+            <span class="dojo-mode ${row.party ? "is-team" : "is-solo"}">${row.party ? "팀" : "개인"}</span>
             <button class="text-button is-danger" type="button" data-delete="${escapeHtml(row.id)}">삭제</button>
           </div>
           <div class="dojo-card-hero">
-            <span>검은 허리띠까지</span>
+            <span>검은 허리띠까지<em class="dojo-card-score">지금 ${escapeHtml(formatCount(row.score || 0))}점</em></span>
             <strong>${escapeHtml(belt)}</strong>
             <p class="dojo-card-meso"><span>시간당 메소</span><b>${escapeHtml(hour)}</b></p>
           </div>
@@ -813,6 +956,7 @@ export async function render(root) {
             <li><span>실제 시간</span><strong>${escapeHtml(actualTime)}</strong></li>
             <li><span>초당 점수</span><strong>${escapeHtml(perSecond)}</strong></li>
             <li><span>점수당 초</span><strong>${escapeHtml(perPoint)}</strong></li>
+            <li><span>총 검은색 허리띠 소요시간</span><strong>${escapeHtml(beltFull)}</strong></li>
           </ul>
         </article>`;
       })
@@ -825,7 +969,7 @@ export async function render(root) {
     cancelClock();
     bandPending = null;
     routePending = null;
-    clockTarget = "";
+    clockTarget = null;
     const id = characterId || row?.character_id || "";
     const mode = party || (row?.party ? "team" : "solo");
     form.dataset.editingId = row?.id || "";
@@ -833,7 +977,9 @@ export async function render(root) {
     form.dataset.openParty = mode;
     form.elements.character_id.value = id;
     form.elements.party.value = mode;
-    form.elements.score.value = row?.score == null ? "" : String(row.score);
+    syncPartyButtons();
+    const sharedScore = row?.score ?? sheetFor(id, mode === "team" ? "solo" : "team")?.score;
+    form.elements.score.value = sharedScore == null ? "" : String(sharedScore);
     const times = parseFloors(row?.floors);
     for (const band of BANDS) {
       form.elements[`band_${band.start}`].value = times.has(band.start) ? String(times.get(band.start)) : "";
@@ -883,6 +1029,7 @@ export async function render(root) {
     if (snapshot() !== savedSnapshot && !window.confirm("저장하지 않은 내용이 있습니다. 다른 기록을 열까요?")) {
       form.elements.character_id.value = previousCharacter;
       form.elements.party.value = previousParty;
+      syncPartyButtons();
       return false;
     }
     fillSheet(sheetFor(characterId, party), characterId, party);
@@ -893,7 +1040,7 @@ export async function render(root) {
     cancelClock();
     bandPending = null;
     routePending = null;
-    clockTarget = "";
+    clockTarget = null;
     form.elements.score.value = "";
     for (const band of BANDS) form.elements[`band_${band.start}`].value = "";
     draftRuns = new Map();
@@ -1014,8 +1161,8 @@ export async function render(root) {
       notify(current.error, "error");
       return false;
     }
-    if (!current.times.size) {
-      notify("구간 초를 하나 이상 입력해 주세요.", "error");
+    if (!current.times.size && !draftRuns.size) {
+      notify("구간 초나 실제 시간을 하나 이상 입력해 주세요.", "error");
       return false;
     }
     const character = readCharacter();
@@ -1049,6 +1196,10 @@ export async function render(root) {
     form.dataset.openCharacter = character.characterId;
     form.dataset.openParty = current.party ? "team" : "solo";
     savedSnapshot = snapshot();
+    const sibling = sheetFor(character.characterId, current.party ? "solo" : "team");
+    if (sibling && sibling.id !== data.id && String(sibling.score ?? "") !== String(payload.score ?? "")) {
+      await supabase.from("dojo_records").update({ score: payload.score }).eq("id", sibling.id);
+    }
     if (!runsReady && draftRuns.size) {
       notify("구간 시간은 저장했습니다. 돌아본 시간은 sql/018_dojo_character_runs.sql 을 실행한 뒤에 저장됩니다.", "info");
     } else notify(doneMessage);
@@ -1144,6 +1295,8 @@ export async function render(root) {
   form.addEventListener("change", (event) => {
     if (event.target.matches("[data-clock-target]")) {
       clockTarget = event.target.value;
+      if (routePending) routePending.key = clockTarget;
+      paintPlan();
       return;
     }
     if (event.target.matches("[data-run-part]")) return;
@@ -1266,10 +1419,68 @@ export async function render(root) {
       return;
     }
     if (event.target.closest("[data-clear]")) clearInputs();
+    const partyChoice = event.target.closest("[data-party-choice]");
+    if (partyChoice) {
+      setParty(partyChoice.dataset.partyChoice);
+      return;
+    }
+    const bestViewButton = event.target.closest("[data-best-view]");
+    if (bestViewButton) {
+      if (bestViewButton.disabled) return;
+      const next = bestViewButton.dataset.bestView;
+      if (next !== bestView) {
+        bestView = next;
+        paintPlan();
+      }
+      return;
+    }
   });
 
   form.dataset.openParty = "solo";
   paintPlan();
   savedSnapshot = snapshot();
+
+  belts.addEventListener("pointerover", (event) => {
+    const icon = event.target.closest(".dojo-belt-icon.has-detail");
+    if (!icon || !belts.contains(icon)) return;
+    showBeltTip(icon);
+  });
+  belts.addEventListener("pointerout", (event) => {
+    const icon = event.target.closest(".dojo-belt-icon.has-detail");
+    if (!icon || beltTipIcon !== icon) return;
+    const next = event.relatedTarget;
+    if (next && icon.contains(next)) return;
+    hideBeltTip();
+  });
+  belts.addEventListener("focusin", (event) => {
+    const icon = event.target.closest(".dojo-belt-icon.has-detail");
+    if (icon && belts.contains(icon)) showBeltTip(icon);
+  });
+  belts.addEventListener("focusout", (event) => {
+    const icon = event.target.closest(".dojo-belt-icon.has-detail");
+    if (!icon || beltTipIcon !== icon) return;
+    const next = event.relatedTarget;
+    if (next && icon.contains(next)) return;
+    hideBeltTip();
+  });
+  if (!beltTip.dataset.bound) {
+    beltTip.dataset.bound = "1";
+    const dismiss = () => {
+      const tip = document.getElementById("dojo-belt-tip");
+      if (!tip || tip.hidden) return;
+      tip.hidden = true;
+      tip.classList.remove("is-open");
+      tip.dataset.active = "";
+      const img = tip.querySelector("img");
+      if (img) {
+        img.removeAttribute("src");
+        img.alt = "";
+      }
+    };
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
+  }
+  hideBeltTip();
+
   await load();
 }

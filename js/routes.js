@@ -3,6 +3,7 @@ export const routes = [
   { id: "dashboard", label: "홈" },
   { id: "characters", label: "캐릭터" },
   { id: "hunts", label: "사냥" },
+  { id: "level-plan", label: "레벨업 계산" },
   { id: "dojo", label: "무릉" },
   { id: "monsters", label: "몬스터" },
   { id: "trades", label: "거래" },
