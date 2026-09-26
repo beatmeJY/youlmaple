@@ -119,7 +119,7 @@ export async function render(root) {
           </label>
           <label class="boss-switch boss-soon-also">
             <input type="checkbox" data-boss-soon-also />
-            <span>오늘·곧도 보기</span>
+            <span>오늘 곧 보기</span>
           </label>
         </div>
       </div>
