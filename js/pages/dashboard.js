@@ -1,4 +1,5 @@
 import { bosses, formatPossible, formatRemain, formatStamp, todaySlot } from "../boss-cooldown.js";
+import { attachFaceUrls, faceMarkup, missingFaceColumn } from "../character-face.js";
 import { translateDbError } from "../db-error.js";
 import { escapeHtml } from "../format.js";
 import { jobLabel, jobRecord } from "../job-label.js";
@@ -56,14 +57,19 @@ export async function render(root) {
   const notes = root.querySelector("[data-notes]");
   const supabase = await getSupabase();
   if (!glance.isConnected) return;
-  const [result, noteResult] = await Promise.all([
-    supabase
+  const noteResult = await supabase.from("notes").select("id, title, content").order("updated_at", { ascending: false });
+  let result = await supabase
+    .from("characters")
+    .select(
+      "id, name, job, face_path, pianus_enabled, pianus_at, papulatus_enabled, papulatus_at, rift_enabled, rift_at, jobs(name, color, color_dark)",
+    );
+  if (result.error && missingFaceColumn(result.error)) {
+    result = await supabase
       .from("characters")
       .select(
         "id, name, job, pianus_enabled, pianus_at, papulatus_enabled, papulatus_at, rift_enabled, rift_at, jobs(name, color, color_dark)",
-      ),
-    supabase.from("notes").select("id, title, content").order("updated_at", { ascending: false }),
-  ]);
+      );
+  }
   if (!glance.isConnected) return;
   paintNotes(notes, noteResult);
   if (result.error) {
@@ -73,6 +79,8 @@ export async function render(root) {
   }
 
   const rows = result.data ?? [];
+  await attachFaceUrls(supabase, rows);
+  if (!glance.isConnected) return;
   let signature = "";
   const timer = window.setInterval(tick, 1000);
 
@@ -148,7 +156,10 @@ function characterCard(section, item) {
   return `
     <article class="home-char${slot.ready ? " is-ready" : ""}">
       <div class="home-who">
-        <strong>${escapeHtml(row.name)}</strong>
+        <div class="home-identity">
+          ${faceMarkup(row.face_url)}
+          <strong>${escapeHtml(row.name)}</strong>
+        </div>
         ${lines}
       </div>
       ${time}

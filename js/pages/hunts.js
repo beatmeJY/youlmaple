@@ -10,7 +10,7 @@ import { notify } from "../toast.js";
 const huntColumns =
   "id, character_id, character_name, job, level, potion_cost, leech_fee, exp_per_hour, meso_per_hour, title, memo, created_at";
 
-const planKey = "youlmaple.huntPlan";
+const planKey = "yourmaple.huntPlan";
 const jobFamilies = ["전사", "마법사", "궁수", "도적", "해적"];
 
 function couponCountText(count, label) {
@@ -150,6 +150,11 @@ export async function render(root) {
       <div class="summary is-plan" data-plan-result hidden></div>
       </div>
     </section>
+    <div class="hunt-split" role="separator" aria-label="계산과 기록 구분">
+      <span class="hunt-split-rail" aria-hidden="true"></span>
+      <span class="hunt-split-mark">기록</span>
+      <span class="hunt-split-rail" aria-hidden="true"></span>
+    </div>
     <section class="hunt-panel is-log">
       <div class="hunt-panel-head">
         <div>

@@ -251,6 +251,7 @@ create table if not exists public.characters (
   rift_enabled boolean not null default false,
   rift_at timestamptz,
   quests_hidden boolean not null default false,
+  face_path text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint characters_level_check check (level is null or level >= 1),
@@ -275,6 +276,7 @@ comment on column public.characters.papulatus_at is '마지막으로 파풀라�
 comment on column public.characters.rift_enabled is '차원의 균열 조각 획득 버튼을 카드에 표시. 레벨과 퀘스트를 맞춘 캐릭터만 켭니다.';
 comment on column public.characters.rift_at is '마지막으로 차원의 균열 조각을 얻은 시각. 이 시각부터 정확히 1일 뒤에 다시 얻을 수 있습니다.';
 comment on column public.characters.quests_hidden is '켜면 퀘스트 완료 표에 이 캐릭터를 표시하지 않습니다. 완료 기록은 그대로 둡니다.';
+comment on column public.characters.face_path is '얼굴 사진 경로. character-faces 버킷 안의 user_id/캐릭터id.확장자. 비어 있으면 얼굴이 없습니다.';
 
 create index if not exists characters_user_name_idx on public.characters (user_id, name);
 create index if not exists characters_job_idx on public.characters (job_id);

@@ -5,7 +5,7 @@ export function renderSetup(root, message, title = "설정이 필요합니다") 
   root.innerHTML = `
     <section class="auth-screen">
       <div class="auth-toolbar">
-        <p class="brand-mark">Youl maple</p>
+        <p class="brand-mark">Your Maple</p>
         <button class="icon-button" type="button" data-theme-toggle>다크 모드</button>
       </div>
       <div class="auth-card">
@@ -22,11 +22,11 @@ export function renderLogin(root) {
   root.innerHTML = `
     <section class="auth-screen">
       <div class="auth-toolbar">
-        <p class="brand-mark">Youl maple</p>
+        <p class="brand-mark">Your Maple</p>
         <button class="icon-button" type="button" data-theme-toggle>다크 모드</button>
       </div>
       <div class="auth-card">
-        <h1>Youl maple</h1>
+        <h1>Your Maple</h1>
         <p>로그인한 계정만 내 데이터를 볼 수 있습니다.</p>
         <form id="auth-form">
           <label class="field">

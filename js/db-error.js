@@ -33,6 +33,9 @@ export function translateDbError(error) {
   if (/trades_buy_price_check|trades_sell_price_check/i.test(raw)) return "가격은 0 이상이어야 합니다.";
   if (/account_character_limit/i.test(raw)) return "한 계정에는 캐릭터를 6개까지 만들 수 있습니다.";
   if (/account_not_owned/i.test(raw)) return "내 계정이 아닌 곳에는 캐릭터를 넣을 수 없습니다.";
+  if (/face_path/i.test(raw) && /could not find|schema cache|does not exist/i.test(raw)) {
+    return "얼굴 칸이 없습니다. Supabase SQL Editor에서 sql/026_character_face.sql 을 실행해 주세요.";
+  }
   if (/quests_hidden/i.test(raw) && /could not find|schema cache|does not exist/i.test(raw)) {
     return "퀘스트 표시 칸이 없습니다. Supabase SQL Editor에서 sql/023_character_quests_hidden.sql 을 실행해 주세요.";
   }

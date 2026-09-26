@@ -1,3 +1,4 @@
+import { attachFaceUrls, faceMarkup, missingFaceColumn } from "../character-face.js";
 import { translateDbError } from "../db-error.js";
 import {
   BANDS,
@@ -50,14 +51,20 @@ function floorsTable() {
   return BANDS.map((band) => {
     const label = spanText(band.start, band.end);
     const saveTitle = SAVE_FLOORS.includes(band.end) ? ` title="${band.end}층에서 저장"` : "";
-    return `<label class="dojo-band" data-band-row="${band.start}"${saveTitle}>
-      <span class="dojo-band-name">${label}</span>
-      <span class="dojo-band-time">
+    return `<div class="dojo-band" data-band-row="${band.start}"${saveTitle}>
+      <span class="dojo-band-name">${label}<span class="dojo-band-meta" data-band-points="${band.start}"></span></span>
+      <label class="dojo-band-time">
         <input name="band_${band.start}" inputmode="numeric" autocomplete="off" aria-label="${label} 초" />
         <span>초</span>
+      </label>
+      <span class="dojo-band-clock">
+        <span class="dojo-band-readout" data-band-time hidden>0:00.0</span>
+        <button class="dojo-band-btn" type="button" data-band-start="${band.start}" aria-label="${label} 시작">시작</button>
+        <button class="dojo-band-btn" type="button" data-band-stop="${band.start}" aria-label="${label} 종료" disabled>종료</button>
+        <button class="dojo-band-btn" type="button" data-band-apply="${band.start}" aria-label="${label} 반영">반영</button>
+        <button class="dojo-band-btn" type="button" data-band-cancel="${band.start}" aria-label="${label} 취소">취소</button>
       </span>
-      <span class="dojo-band-meta" data-band-points="${band.start}"></span>
-    </label>`;
+    </div>`;
   }).join("");
 }
 
@@ -66,6 +73,8 @@ function samePrice(left, right) {
   return BigInt(left) === BigInt(right);
 }
 
+const dojoChain = `<svg viewBox="0 0 20 52" width="18" height="48" focusable="false"><g fill="none" stroke="#5c3818" stroke-width="4" stroke-linejoin="round"><rect x="4" y="0" width="12" height="22" rx="6"/><rect x="1" y="16" width="18" height="12" rx="6"/><rect x="4" y="28" width="12" height="22" rx="6"/></g><g fill="none" stroke="#f3d7a2" stroke-width="2.1" stroke-linejoin="round"><rect x="4" y="0" width="12" height="22" rx="6"/><rect x="1" y="16" width="18" height="12" rx="6"/><rect x="4" y="28" width="12" height="22" rx="6"/></g></svg>`;
+
 export async function render(root) {
   root.innerHTML = `
     <div class="dojo-page">
@@ -73,16 +82,29 @@ export async function render(root) {
       <p class="dojo-kicker">MU LUNG</p>
       <h1>무릉도장</h1>
     </header>
-    <section>
-      <div class="page-toolbar">
-        <h2>캐릭터</h2>
-      </div>
-      <div data-records></div>
+    <section class="dojo-frame dojo-belts">
+      <div class="dojo-belts-head"><span>허리띠 시세</span></div>
+      <p class="hint">공용 시세입니다. 가격을 적으면 아래에 쌓입니다.</p>
+      <div data-belts></div>
     </section>
+    <section class="dojo-cast">
+      <img class="dojo-roof" src="img/dojo-roof.png" alt="" />
+      <section class="dojo-frame">
+        <div class="page-toolbar">
+          <h2>캐릭터</h2>
+          <p class="dojo-picked-label" data-picked-label hidden></p>
+        </div>
+        <div data-records></div>
+      </section>
+    </section>
+    <div class="dojo-link" aria-hidden="true">${dojoChain}${dojoChain}</div>
     <form id="dojo-form">
-      <section>
-      <div class="page-toolbar">
-        <h2>구간 시간</h2>
+      <section class="dojo-frame">
+      <div class="dojo-who" data-who>
+        <div class="dojo-who-copy">
+          <p class="dojo-who-kicker">구간 시간</p>
+          <h2>캐릭터를 선택해 주세요</h2>
+        </div>
       </div>
       <div class="editor">
         <details class="dojo-note span-all">
@@ -90,37 +112,40 @@ export async function render(root) {
           <p class="hint">구간 전체를 깨는 초를 적습니다. 개인은 1~5층이 층마다 2점, 팀은 1점입니다. 5, 10, 15, 20, 25층에서 저장할 수 있고, 이어서 더 위쪽 5층 단위에 다시 저장할 수 있습니다. 저장 한 번에 참고 시간 ${SAVE_SECONDS}초를 더합니다. 하루 최대 3,500점이고, 검은 허리띠는 17,000점입니다.</p>
         </details>
         <div class="dojo-fields">
-        <label class="field dojo-field-character"><span>캐릭터</span>
-          <select name="character_id">
-            <option value="">캐릭터 선택</option>
-          </select>
-        </label>
-        <label class="field"><span>방식</span>
-          <select name="party">
-            <option value="solo">개인</option>
-            <option value="team">팀</option>
-          </select>
-        </label>
-        <label class="field"><span>지금 점수</span><input name="score" inputmode="numeric" autocomplete="off" placeholder="없으면 0" /></label>
-        <label class="field dojo-field-memo"><span>메모</span><textarea name="memo" rows="1" placeholder="자리, 스펙"></textarea></label>
+          <label class="field dojo-field-character"><span>캐릭터</span>
+            <select name="character_id">
+              <option value="">캐릭터 선택</option>
+            </select>
+          </label>
+          <label class="field dojo-field-party"><span>방식</span>
+            <select name="party">
+              <option value="solo">개인</option>
+              <option value="team">팀</option>
+            </select>
+          </label>
+          <label class="field dojo-field-score"><span>지금 점수</span><input name="score" inputmode="numeric" autocomplete="off" placeholder="없으면 0" /></label>
         </div>
-        <div class="dojo-bands">
-          <p class="dojo-bands-title">구간 초</p>
-          ${floorsTable()}
+        <div class="dojo-split">
+          <div class="dojo-bands">
+            <p class="dojo-bands-title">구간 초</p>
+            ${floorsTable()}
+          </div>
+          <div class="dojo-best is-empty" data-best>
+            <p class="dojo-best-kicker">최적 동선</p>
+            <p class="dojo-best-empty">구간 초를 모두 입력하면 여기에 정리됩니다.</p>
+          </div>
         </div>
-        <div class="span-all" data-plan></div>
         <div class="button-row">
           <button class="primary-button" type="submit" data-save>이 캐릭터 저장</button>
           <button class="secondary-button" type="button" data-clear>입력 지우기</button>
         </div>
       </div>
       </section>
+      <div class="dojo-link" aria-hidden="true">${dojoChain}${dojoChain}</div>
+      <section class="dojo-notice">
+        <div data-plan></div>
+      </section>
     </form>
-    <section class="dojo-belts">
-      <div class="dojo-belts-head"><span>허리띠 시세</span><span class="hint" data-belt-summary>공용 시세를 불러오는 중입니다.</span></div>
-      <p class="hint">공용 시세입니다. 가격을 적으면 아래에 쌓입니다.</p>
-      <div data-belts></div>
-    </section>
     </div>
   `;
 
@@ -131,11 +156,20 @@ export async function render(root) {
   let characters = [];
   let accounts = [];
   let draftRuns = new Map();
+  let clock = null;
+  let bandPending = null;
+  let routePending = null;
+  let clockTimer = 0;
+  let clockTarget = "";
+  let clockPressed = false;
+  let landedKey = "";
+  let arriveCard = false;
   let savedSnapshot = "";
   let runsReady = true;
   let priceRows = [];
   let recordRows = [];
   let loadId = 0;
+  let saving = false;
 
   function partyOf() {
     return form.elements.party.value === "team";
@@ -148,7 +182,6 @@ export async function render(root) {
       character: form.dataset.openCharacter || "",
       party: form.dataset.openParty || "solo",
       score: form.elements.score.value.trim(),
-      memo: form.elements.memo.value.trim(),
       bands,
       runs,
     });
@@ -166,10 +199,6 @@ export async function render(root) {
     const map = new Map();
     for (const [belt, row] of latestPrices()) map.set(belt, row.price);
     return map;
-  }
-
-  function shortBelt(belt) {
-    return belt.name.replace(/ 허리띠$/, "");
   }
 
   function floorsOf() {
@@ -286,6 +315,183 @@ export async function render(root) {
     note.textContent = text;
   }
 
+  function formatStopwatch(ms) {
+    const safe = Math.max(0, ms);
+    const minutes = Math.floor(safe / 60000);
+    const seconds = Math.floor(safe / 1000) % 60;
+    const tenths = Math.floor(safe / 100) % 10;
+    return `${minutes}:${String(seconds).padStart(2, "0")}.${tenths}`;
+  }
+
+  function cancelClock() {
+    clock = null;
+    window.clearInterval(clockTimer);
+    clockTimer = 0;
+  }
+
+  function tickClock() {
+    if (!root.isConnected) {
+      cancelClock();
+      return;
+    }
+    if (!clock) return;
+    const time = clock.scope === "band"
+      ? root.querySelector(`[data-band-row="${clock.key}"] [data-band-time]`)
+      : plan.querySelector(".dojo-stopwatch.is-running [data-clock-time]");
+    if (!time) return;
+    time.textContent = formatStopwatch(Date.now() - clock.startedAt);
+  }
+
+  function paintBandClocks() {
+    const runningKey = clock?.scope === "band" ? clock.key : "";
+    const busy = Boolean(clock) || Boolean(bandPending) || Boolean(routePending);
+    for (const band of BANDS) {
+      const row = root.querySelector(`[data-band-row="${band.start}"]`);
+      if (!row) continue;
+      const key = String(band.start);
+      const on = key === runningKey;
+      const pending = bandPending?.key === key;
+      row.classList.toggle("is-timing", on);
+      row.classList.toggle("is-pending", pending);
+      const readout = row.querySelector("[data-band-time]");
+      const start = row.querySelector("[data-band-start]");
+      const stop = row.querySelector("[data-band-stop]");
+      if (readout) {
+        readout.hidden = !on && !pending;
+        if (on) readout.textContent = formatStopwatch(Date.now() - clock.startedAt);
+        if (pending) readout.textContent = `${bandPending.seconds}초`;
+      }
+      if (start) start.disabled = busy && !on;
+      if (stop) stop.disabled = !on;
+    }
+  }
+
+  function startClock() {
+    if (clock?.scope === "band" || bandPending || routePending) return;
+    const select = plan.querySelector("[data-clock-target]");
+    const key = select?.value || clockTarget;
+    if (!key) return;
+    clockTarget = key;
+    clock = { scope: "route", key, startedAt: Date.now() };
+    window.clearInterval(clockTimer);
+    clockTimer = window.setInterval(tickClock, 100);
+    paintPlan();
+  }
+
+  function startBandClock(start) {
+    if (clock || bandPending || routePending) return;
+    clock = { scope: "band", key: String(start), startedAt: Date.now() };
+    window.clearInterval(clockTimer);
+    clockTimer = window.setInterval(tickClock, 100);
+    paintPlan();
+  }
+
+  function stopBandClock() {
+    if (clock?.scope !== "band") return;
+    const key = clock.key;
+    const total = Math.round((Date.now() - clock.startedAt) / 1000);
+    cancelClock();
+    if (total > 86400) {
+      notify("돌아본 시간은 하루를 넘길 수 없습니다.", "error");
+      paintPlan();
+      return;
+    }
+    bandPending = { key, seconds: Math.max(1, total) };
+    paintPlan();
+  }
+
+  async function applyBandPending() {
+    if (!bandPending || saving) return;
+    const input = form.elements[`band_${bandPending.key}`];
+    if (input) input.value = String(bandPending.seconds);
+    bandPending = null;
+    paintPlan();
+    await persistSheet("구간 시간을 저장했습니다.");
+  }
+
+  function cancelBandPending() {
+    bandPending = null;
+    paintPlan();
+  }
+
+  function stopClock() {
+    if (clock?.scope === "band") {
+      stopBandClock();
+      return;
+    }
+    if (!clock) return;
+    const key = clock.key;
+    const total = Math.round((Date.now() - clock.startedAt) / 1000);
+    cancelClock();
+    if (total > 86400) {
+      notify("돌아본 시간은 하루를 넘길 수 없습니다.", "error");
+      paintPlan();
+      return;
+    }
+    routePending = { key, seconds: Math.max(1, total) };
+    clockTarget = key;
+    paintPlan();
+  }
+
+  async function applyRoutePending() {
+    if (!routePending || saving) return;
+    const { key, seconds } = routePending;
+    routePending = null;
+    const minInput = runInput(key, "min");
+    const secInput = runInput(key, "sec");
+    if (minInput) minInput.value = String(Math.floor(seconds / 60));
+    if (secInput) secInput.value = String(seconds % 60);
+    const parsed = applyRun(key);
+    if (parsed.error) {
+      notify(parsed.error, "error");
+      paintPlan();
+      return;
+    }
+    landedKey = key;
+    paintPlan();
+    landedKey = "";
+    await persistSheet("실제 시간을 저장했습니다.");
+  }
+
+  function resetRoutePending() {
+    routePending = null;
+    paintPlan();
+  }
+
+  function timerBar(items) {
+    const options = items
+      .map((item) => ({
+        key: chainKey(item.row.best.saves),
+        label: chainText(item.row.best.saves),
+      }))
+      .filter((item) => item.key);
+    if (routePending) clockTarget = routePending.key;
+    else if (!options.some((item) => item.key === clockTarget)) clockTarget = options[0]?.key || "";
+    const running = clock?.scope === "route";
+    const pending = Boolean(routePending);
+    const busy = Boolean(clock) || Boolean(bandPending) || pending;
+    const time = running
+      ? formatStopwatch(Date.now() - clock.startedAt)
+      : pending
+        ? formatStopwatch(routePending.seconds * 1000)
+        : "0:00.0";
+    const choices = options
+      .map(
+        (item) =>
+          `<option value="${escapeHtml(item.key)}"${item.key === clockTarget ? " selected" : ""}>${escapeHtml(item.label)}</option>`,
+      )
+      .join("");
+    return `<div class="dojo-timer${running ? " is-running" : ""}${pending ? " is-pending" : ""}">
+      <label class="dojo-timer-target"><span>저장 방법</span><select data-clock-target${running || pending ? " disabled" : ""}>${choices}</select></label>
+      <span class="dojo-stopwatch${running ? " is-running" : ""}"><span class="dojo-stopwatch-time" data-clock-time>${time}</span></span>
+      <button class="dojo-stopwatch-btn" type="button" data-clock-start${busy ? " disabled" : ""}>시작</button>
+      <button class="dojo-stopwatch-btn" type="button" data-clock-stop${running ? "" : " disabled"}>종료</button>
+      <button class="dojo-stopwatch-btn" type="button" data-clock-apply>반영</button>
+      <button class="dojo-stopwatch-btn" type="button" data-clock-reset>초기화</button>
+      <button class="dojo-stopwatch-btn dojo-timer-save" type="button" data-save-clock${running || !clockTarget ? " disabled" : ""}>저장</button>
+    </div>`;
+  }
+
   function paintLive(key) {
     const row = [...plan.querySelectorAll("[data-chain]")].find((item) => item.dataset.chain === key);
     if (!row) return;
@@ -324,7 +530,94 @@ export async function render(root) {
     return parsed;
   }
 
+  function planHead() {
+    return `<div class="dojo-plan-row is-head">
+      <span class="dojo-cell is-save">저장</span>
+      <span class="dojo-cell is-score">점수</span>
+      <span class="dojo-cell is-ref-time"><span class="label-wide">참고 시간</span><span class="label-stack">시간</span></span>
+      <span class="dojo-cell is-ref-rate"><span class="label-wide">참고 초당</span><span class="label-stack">초당</span></span>
+      <span class="dojo-cell is-ref-point"><span class="label-wide">참고 점수당</span><span class="label-stack">점수당</span></span>
+      <span class="dojo-cell is-act-time">실제</span>
+      <span class="dojo-cell is-act-rate">실제 초당</span>
+      <span class="dojo-cell is-act-point">실제 점수당</span>
+      <span class="dojo-cell is-belt" title="실제 시간으로 지금 점수에서 17,000점까지">검은 허리띠</span>
+      <span class="dojo-cell is-hour">시간당</span>
+    </div>`;
+  }
+
+  function emptyPlan() {
+    const cells = ["is-save", "is-score", "is-ref-time", "is-ref-rate", "is-ref-point", "is-act-time", "is-act-rate", "is-act-point", "is-belt", "is-hour"]
+      .map((name) => `<span class="dojo-cell ${name}"></span>`)
+      .join("");
+    return `<div class="dojo-board">
+      <div class="dojo-plan is-blank">
+        ${planHead()}
+        <div class="dojo-plan-row is-blank">${cells}<p class="dojo-plan-note">위에 입력하면 표가 나옵니다.</p></div>
+      </div>
+    </div>`;
+  }
+
+  function paintBest(entry) {
+    const box = root.querySelector("[data-best]");
+    if (!box) return;
+    if (!entry?.route) {
+      box.className = "dojo-best is-empty";
+      box.innerHTML = `
+        <div class="dojo-best-card">
+          <p class="dojo-best-kicker">최적 동선</p>
+          <p class="dojo-best-empty">구간 초를 모두 입력하면 여기에 정리됩니다.</p>
+        </div>
+      `;
+      return;
+    }
+    const { route, seconds, mode, score } = entry;
+    const path = route.saves?.length
+      ? route.saves.map((floor) => `<span class="dojo-best-chip">${floor}층</span>`).join(`<span class="dojo-best-arrow" aria-hidden="true">→</span>`)
+      : `<span class="dojo-best-chip">저장 안 함</span>`;
+    const badge = mode === "actual"
+      ? `<span class="dojo-best-badge is-actual">실제 기록</span>`
+      : `<span class="dojo-best-badge is-recommend">추천</span>`;
+    const beltEta = beltText(route, seconds, score || 0);
+    const mesoHour = hourText(route, seconds);
+    box.className = `dojo-best is-${mode}`;
+    box.innerHTML = `
+      <div class="dojo-best-card">
+        <div class="dojo-best-head">
+          ${badge}
+          <p class="dojo-best-kicker">최적 동선</p>
+        </div>
+        <p class="dojo-best-path">${path}</p>
+        <p class="dojo-best-score">${escapeHtml(formatCount(route.points))}<span>점</span></p>
+        <div class="dojo-best-hero">
+          <div class="dojo-best-hero-stat">
+            <span>검은 허리띠까지</span>
+            <strong>${escapeHtml(beltEta)}</strong>
+          </div>
+          <div class="dojo-best-hero-stat is-meso">
+            <span>시간당 메소</span>
+            <strong>${escapeHtml(mesoHour)}</strong>
+          </div>
+        </div>
+        <div class="dojo-best-stats">
+          <div class="dojo-best-stat">
+            <span>초당 점수</span>
+            <strong>${escapeHtml(formatPointsPerSecond(route.points, seconds))}</strong>
+          </div>
+          <div class="dojo-best-stat">
+            <span>소요 시간</span>
+            <strong>${escapeHtml(formatDuration(seconds))}</strong>
+          </div>
+          <div class="dojo-best-stat">
+            <span>점수당 초</span>
+            <strong>${escapeHtml(formatSecondsPerPoint(route.points, seconds))}</strong>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function paintPlan() {
+    paintBandClocks();
     const party = partyOf();
     for (const band of BANDS) {
       const points = root.querySelector(`[data-band-points="${band.start}"]`);
@@ -340,6 +633,7 @@ export async function render(root) {
 
     const current = floorsOf();
     if (current.error) {
+      paintBest(null);
       plan.innerHTML = `<p class="form-message is-error"></p>`;
       plan.querySelector("p").textContent = current.error;
       return;
@@ -360,8 +654,15 @@ export async function render(root) {
 
     const compared = compareSaves(current.times, party);
     if (!compared.best) {
-      plan.innerHTML = `<p class="hint">구간 초를 모두 적으면 참고가 나옵니다.</p>`;
+      paintBest(null);
+      plan.innerHTML = emptyPlan();
       return;
+    }
+    const measured = measuredRoutes(current.times, party, draftRuns);
+    if (measured.best) {
+      paintBest({ mode: "actual", route: measured.best.route, seconds: measured.best.seconds, score: current.score });
+    } else {
+      paintBest({ mode: "recommend", route: compared.best, seconds: compared.best.seconds, score: current.score });
     }
 
     const ranked = compared.rows
@@ -377,7 +678,7 @@ export async function render(root) {
         }
         return compareRoutes(left.row.best, right.row.best);
       });
-    const route = ranked[0].row.best;
+    const route = compared.best;
     for (const band of BANDS) {
       const row = root.querySelector(`[data-band-row="${band.start}"]`);
       const count = route.runs.filter((run) => band.start >= run.start).length;
@@ -394,7 +695,9 @@ export async function render(root) {
         const routeLabel = item.row.best.saves?.length
           ? item.row.best.saves.map((floor) => `<span>${floor}층</span>`).join('<span class="dojo-join"> → </span>')
           : escapeHtml(label);
-        return `<div class="dojo-plan-row${index === 0 ? " is-selected" : ""}" data-chain="${escapeHtml(key)}">
+        const timing = clock?.scope === "route" && clock.key === key ? " is-timing" : "";
+        const landed = landedKey === key ? " is-landed" : "";
+        return `<div class="dojo-plan-row${index === 0 ? " is-selected" : ""}${timing}${landed}" data-chain="${escapeHtml(key)}">
           <span class="dojo-cell is-save"><span class="dojo-value">${routeLabel}</span></span>
           <span class="dojo-cell is-score"><span class="dojo-value">${escapeHtml(formatCount(item.row.best.points))}점</span></span>
           <span class="dojo-cell is-ref-time"><span class="dojo-tag">참고</span><span class="dojo-value">${escapeHtml(formatDuration(item.row.best.seconds))}</span></span>
@@ -409,22 +712,14 @@ export async function render(root) {
       })
       .join("");
     plan.innerHTML = `
+      <div class="dojo-board">
+      ${timerBar(ranked)}
       <div class="dojo-plan">
-        <div class="dojo-plan-row is-head">
-          <span class="dojo-cell is-save">저장</span>
-          <span class="dojo-cell is-score">점수</span>
-          <span class="dojo-cell is-ref-time"><span class="label-wide">참고 시간</span><span class="label-stack">시간</span></span>
-          <span class="dojo-cell is-ref-rate"><span class="label-wide">참고 초당</span><span class="label-stack">초당</span></span>
-          <span class="dojo-cell is-ref-point"><span class="label-wide">참고 점수당</span><span class="label-stack">점수당</span></span>
-          <span class="dojo-cell is-act-time">실제</span>
-          <span class="dojo-cell is-act-rate">실제 초당</span>
-          <span class="dojo-cell is-act-point">실제 점수당</span>
-          <span class="dojo-cell is-belt" title="실제 시간으로 지금 점수에서 17,000점까지">검은 허리띠</span>
-          <span class="dojo-cell is-hour">시간당</span>
-        </div>
+        ${planHead()}
         ${body}
       </div>
       <p class="form-message is-error" data-measured hidden></p>
+      </div>
     `;
   }
 
@@ -461,14 +756,6 @@ export async function render(root) {
         .join("");
     }).join("");
     belts.innerHTML = `<div class="table-wrap"><table class="data-table dojo-prices"><thead><tr><th>허리띠</th><th>시세</th><th>이전과 차이</th><th>기록</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`;
-    const summary = root.querySelector("[data-belt-summary]");
-    if (summary) {
-      const latest = latestPrices();
-      summary.textContent = BELTS.map((belt) => {
-        const row = latest.get(belt.id);
-        return `${shortBelt(belt)} ${row ? formatCount(row.price) : "없음"}`;
-      }).join(" · ");
-    }
   }
 
   function paintRecords() {
@@ -478,10 +765,24 @@ export async function render(root) {
     }
     const openCharacterId = form.dataset.openCharacter || "";
     const openParty = form.dataset.openParty || "solo";
-    const body = recordRows
-      .map((row) => {
-        const measured = measuredRoutes(parseFloors(row.floors), row.party, row.runs);
-        const actual = measured.best;
+    const ranked = recordRows
+      .map((row) => ({
+        row,
+        actual: measuredRoutes(parseFloors(row.floors), row.party, row.runs).best,
+      }))
+      .sort((left, right) => {
+        if (left.actual && right.actual) {
+          const speed = compareRoutes(
+            { points: left.actual.route.points, seconds: left.actual.seconds, start: left.actual.route.start },
+            { points: right.actual.route.points, seconds: right.actual.seconds, start: right.actual.route.start },
+          );
+          if (speed) return speed;
+        } else if (left.actual) return -1;
+        else if (right.actual) return 1;
+        return left.row.character_name.localeCompare(right.row.character_name, "ko");
+      });
+    const body = ranked
+      .map(({ row, actual }) => {
         const party = row.party ? "team" : "solo";
         const selected = row.character_id === openCharacterId && party === openParty;
         const open = row.character_id ? ` data-open="${escapeHtml(row.character_id)}" data-party="${party}" tabindex="0"` : "";
@@ -491,9 +792,14 @@ export async function render(root) {
         const perPoint = actual ? formatSecondsPerPoint(actual.route.points, actual.seconds) : "-";
         const belt = !actual ? "-" : beltText(actual.route, actual.seconds, row.score || 0);
         const hour = !actual ? "-" : hourText(actual.route, actual.seconds);
-        return `<article class="dojo-card${selected ? " is-selected" : ""}"${open}>
+        const popped = arriveCard && selected ? " is-pop" : "";
+        const face = faceMarkup(characters.find((item) => item.id === row.character_id)?.face_url);
+        const picked = selected ? `<span class="dojo-picked">선택됨</span>` : "";
+        return `<article class="dojo-card${selected ? " is-selected" : ""}${popped}"${open}${selected ? ` aria-current="true"` : ""}>
           <div class="dojo-card-head">
+            ${face}
             <h3>${escapeHtml(row.character_name)}</h3>
+            ${picked}
             <span class="dojo-mode">${row.party ? "팀" : "개인"}</span>
             <button class="text-button is-danger" type="button" data-delete="${escapeHtml(row.id)}">삭제</button>
           </div>
@@ -512,9 +818,14 @@ export async function render(root) {
       })
       .join("");
     records.innerHTML = `<div class="dojo-cards">${body}</div>`;
+    arriveCard = false;
   }
 
   function fillSheet(row, characterId, party) {
+    cancelClock();
+    bandPending = null;
+    routePending = null;
+    clockTarget = "";
     const id = characterId || row?.character_id || "";
     const mode = party || (row?.party ? "team" : "solo");
     form.dataset.editingId = row?.id || "";
@@ -523,15 +834,40 @@ export async function render(root) {
     form.elements.character_id.value = id;
     form.elements.party.value = mode;
     form.elements.score.value = row?.score == null ? "" : String(row.score);
-    form.elements.memo.value = row?.memo || "";
     const times = parseFloors(row?.floors);
     for (const band of BANDS) {
       form.elements[`band_${band.start}`].value = times.has(band.start) ? String(times.get(band.start)) : "";
     }
     draftRuns = readRuns(row?.runs);
     paintPlan();
+    paintWho();
     savedSnapshot = snapshot();
     if (recordRows.length) paintRecords();
+  }
+
+  function paintWho() {
+    const who = root.querySelector("[data-who]");
+    const label = root.querySelector("[data-picked-label]");
+    const id = form.dataset.openCharacter || form.elements.character_id.value;
+    const character = characters.find((row) => row.id === id);
+    const mode = form.elements.party.value === "team" ? "팀" : "개인";
+    if (!who) return;
+    if (!character) {
+      who.classList.remove("is-on");
+      who.innerHTML = `<div class="dojo-who-copy"><p class="dojo-who-kicker">구간 시간</p><h2>캐릭터를 선택해 주세요</h2></div>`;
+      if (label) label.hidden = true;
+      return;
+    }
+    const job = character.job ? escapeHtml(character.job) : "";
+    const level = character.level ? `Lv ${escapeHtml(formatCount(character.level))}` : "";
+    const meta = [job, level, mode].filter(Boolean).join(" · ");
+    const face = character.face_url ? faceMarkup(character.face_url) : "";
+    who.classList.add("is-on");
+    who.innerHTML = `${face}<div class="dojo-who-copy"><p class="dojo-who-kicker">구간 시간</p><h2>${escapeHtml(character.name)}</h2><p class="dojo-who-meta">${meta}</p></div>`;
+    if (label) {
+      label.hidden = false;
+      label.textContent = `${character.name} · ${mode}`;
+    }
   }
 
   function sheetFor(characterId, party) {
@@ -554,8 +890,11 @@ export async function render(root) {
   }
 
   function clearInputs() {
+    cancelClock();
+    bandPending = null;
+    routePending = null;
+    clockTarget = "";
     form.elements.score.value = "";
-    form.elements.memo.value = "";
     for (const band of BANDS) form.elements[`band_${band.start}`].value = "";
     draftRuns = new Map();
     paintPlan();
@@ -573,8 +912,11 @@ export async function render(root) {
     const supabase = await getSupabase();
     if (id !== loadId || !root.isConnected) return;
     const legacyColumns = recordColumns.replace(", runs", "");
-    const [characterResult, accountResult, priceResult, recordResult] = await Promise.all([
-      supabase.from("characters").select("id, account_id, name, job, level"),
+    let characterResult = await supabase.from("characters").select("id, account_id, name, job, level, face_path");
+    if (characterResult.error && missingFaceColumn(characterResult.error)) {
+      characterResult = await supabase.from("characters").select("id, account_id, name, job, level");
+    }
+    const [accountResult, priceResult, recordResult] = await Promise.all([
       supabase.from("accounts").select("id, name").order("name"),
       supabase.from("dojo_belt_prices").select("id, belt, price, created_at").order("created_at", { ascending: false }),
       supabase.from("dojo_records").select(recordColumns).order("created_at", { ascending: false }).then(async (result) => {
@@ -593,14 +935,12 @@ export async function render(root) {
       return;
     }
     characters = characterResult.data ?? [];
+    await attachFaceUrls(supabase, characters);
+    if (id !== loadId || !root.isConnected) return;
     if (accountResult.error) notify(translateDbError(accountResult.error), "error");
     accounts = accountResult.error ? [] : sortByName(accountResult.data ?? []);
     paintCharacters();
-    if (priceResult.error) {
-      showError(belts, priceResult.error);
-      const summary = root.querySelector("[data-belt-summary]");
-      if (summary) summary.textContent = "시세를 불러오지 못했습니다.";
-    }
+    if (priceResult.error) showError(belts, priceResult.error);
     else {
       priceRows = priceResult.data ?? [];
       paintBelts();
@@ -617,6 +957,7 @@ export async function render(root) {
       }
     }
     paintPlan();
+    paintWho();
   }
 
   async function savePrice(beltId) {
@@ -661,26 +1002,26 @@ export async function render(root) {
     await load();
   }
 
-  async function saveRecord(event) {
-    event.preventDefault();
+  async function persistSheet(doneMessage = "구간 시간을 저장했습니다.") {
+    if (saving) return false;
     const synced = syncRuns();
     if (synced.error) {
       notify(synced.error, "error");
-      return;
+      return false;
     }
     const current = floorsOf();
     if (current.error) {
       notify(current.error, "error");
-      return;
+      return false;
     }
     if (!current.times.size) {
       notify("구간 초를 하나 이상 입력해 주세요.", "error");
-      return;
+      return false;
     }
     const character = readCharacter();
     if (character.error) {
       notify(character.error, "error");
-      return;
+      return false;
     }
     const existing = sheetFor(character.characterId, current.party ? "team" : "solo");
     const editingId = existing?.id || "";
@@ -690,18 +1031,19 @@ export async function render(root) {
       party: current.party,
       floors: Object.fromEntries(current.times),
       score: form.elements.score.value.trim() ? current.score : null,
-      memo: form.elements.memo.value.trim() || null,
     };
     if (runsReady) payload.runs = Object.fromEntries(draftRuns);
+    saving = true;
     const supabase = await getSupabase();
     const request = editingId
       ? supabase.from("dojo_records").update(payload).eq("id", editingId).select("id").single()
       : supabase.from("dojo_records").insert(payload).select("id").single();
     const { data, error } = await request;
-    if (!root.isConnected) return;
+    saving = false;
+    if (!root.isConnected) return false;
     if (error) {
       notify(translateDbError(error), "error");
-      return;
+      return false;
     }
     form.dataset.editingId = data.id;
     form.dataset.openCharacter = character.characterId;
@@ -709,8 +1051,28 @@ export async function render(root) {
     savedSnapshot = snapshot();
     if (!runsReady && draftRuns.size) {
       notify("구간 시간은 저장했습니다. 돌아본 시간은 sql/018_dojo_character_runs.sql 을 실행한 뒤에 저장됩니다.", "info");
-    } else notify("구간 시간을 저장했습니다.");
+    } else notify(doneMessage);
     await load();
+    return true;
+  }
+
+  async function saveRoute(key) {
+    const parsed = readRun(key);
+    if (parsed.error) {
+      notify(parsed.error, "error");
+      return;
+    }
+    if (parsed.seconds == null) {
+      notify("저장할 실제 시간을 입력해 주세요.", "error");
+      return;
+    }
+    applyRun(key);
+    await persistSheet("실제 시간을 저장했습니다.");
+  }
+
+  async function saveRecord(event) {
+    event.preventDefault();
+    await persistSheet();
   }
 
   async function deleteRecord(id) {
@@ -780,6 +1142,10 @@ export async function render(root) {
     if (event.target.name?.startsWith("band_") || event.target.name === "score") paintPlan();
   });
   form.addEventListener("change", (event) => {
+    if (event.target.matches("[data-clock-target]")) {
+      clockTarget = event.target.value;
+      return;
+    }
     if (event.target.matches("[data-run-part]")) return;
     if (event.target.name === "character_id") openSheet(event.target.value, form.elements.party.value);
     if (event.target.name === "party") openSheet(form.elements.character_id.value, event.target.value);
@@ -788,6 +1154,7 @@ export async function render(root) {
     if (!event.target.matches?.("[data-run-part]")) return;
     const next = event.relatedTarget;
     if (next?.matches?.("[data-run-part]")) return;
+    if (clockPressed || next?.closest?.("[data-clock-start], [data-clock-stop], [data-clock-apply], [data-clock-reset], [data-band-start], [data-band-stop], [data-band-apply], [data-band-cancel], [data-save-clock]")) return;
     const parsed = applyRun(event.target.dataset.runKey);
     if (!parsed.error) paintPlan();
   });
@@ -801,7 +1168,79 @@ export async function render(root) {
     event.preventDefault();
     card.click();
   });
+  function burstStart(button) {
+    const rect = button.getBoundingClientRect();
+    const node = document.createElement("span");
+    node.className = "dojo-burst";
+    node.style.left = `${rect.left + rect.width / 2}px`;
+    node.style.top = `${rect.top + rect.height / 2}px`;
+    node.innerHTML = Array.from({ length: 10 }, (_, index) => `<i style="--a:${index * 36}deg"></i>`).join("");
+    document.body.appendChild(node);
+    window.setTimeout(() => node.remove(), 620);
+  }
+
+  root.addEventListener("pointerdown", (event) => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const control = event.target.closest("button, .dojo-card");
+    if (!control || control.disabled) return;
+    control.classList.remove("is-tap");
+    void control.offsetWidth;
+    control.classList.add("is-tap");
+    const start = event.target.closest("[data-band-start], [data-clock-start]");
+    if (start && !start.disabled) burstStart(start);
+  });
+  root.addEventListener("mousedown", (event) => {
+    clockPressed = Boolean(event.target.closest("[data-clock-start], [data-clock-stop], [data-clock-apply], [data-clock-reset], [data-band-start], [data-band-stop], [data-band-apply], [data-band-cancel], [data-save-clock]"));
+  });
+  root.addEventListener("mouseup", () => {
+    clockPressed = false;
+  });
   root.addEventListener("click", (event) => {
+    const clockStart = event.target.closest("[data-clock-start]");
+    if (clockStart && !clockStart.disabled) {
+      startClock();
+      return;
+    }
+    const clockStop = event.target.closest("[data-clock-stop]");
+    if (clockStop && !clockStop.disabled) {
+      stopClock();
+      return;
+    }
+    const clockApply = event.target.closest("[data-clock-apply]");
+    if (clockApply) {
+      applyRoutePending();
+      return;
+    }
+    const clockReset = event.target.closest("[data-clock-reset]");
+    if (clockReset) {
+      resetRoutePending();
+      return;
+    }
+    const bandStart = event.target.closest("[data-band-start]");
+    if (bandStart && !bandStart.disabled) {
+      startBandClock(bandStart.dataset.bandStart);
+      return;
+    }
+    const bandStop = event.target.closest("[data-band-stop]");
+    if (bandStop && !bandStop.disabled) {
+      stopBandClock();
+      return;
+    }
+    const bandApply = event.target.closest("[data-band-apply]");
+    if (bandApply) {
+      applyBandPending();
+      return;
+    }
+    const saveRun = event.target.closest("[data-save-clock]");
+    if (saveRun && !saveRun.disabled) {
+      saveRoute(clockTarget);
+      return;
+    }
+    const bandCancel = event.target.closest("[data-band-cancel]");
+    if (bandCancel) {
+      cancelBandPending();
+      return;
+    }
     const savePriceButton = event.target.closest("[data-save-price]");
     if (savePriceButton) {
       savePrice(savePriceButton.dataset.savePrice);
@@ -816,7 +1255,9 @@ export async function render(root) {
     if (openRow && !event.target.closest("button")) {
       const characterId = openRow.dataset.open;
       const party = openRow.dataset.party || "solo";
+      arriveCard = true;
       if (characterId && openSheet(characterId, party)) scrollToSheet();
+      else arriveCard = false;
       return;
     }
     const deleteButton = event.target.closest("[data-delete]");

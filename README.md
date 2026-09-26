@@ -1,4 +1,4 @@
-# Youl maple
+# Your Maple
 
 개인용 메이플스토리 정보와 메모를 저장하는 웹앱입니다.  
 데이터는 Supabase에 저장되고, 로그인한 본인만 자기 데이터를 볼 수 있습니다.
@@ -79,6 +79,8 @@ Supabase SQL Editor에서 아래 순서대로 파일 전체를 붙여 넣고 Run
 
 022까지 이미 실행했다면 `sql/023_character_quests_hidden.sql` 만 실행합니다. 캐릭터에 퀘스트 표에서 빼기 칸을 추가합니다. 이미 이 파일을 실행했다면 같은 파일을 다시 실행합니다.
 
+023까지 이미 실행했다면 `sql/026_character_face.sql` 만 실행합니다. 캐릭터 얼굴 사진을 저장할 칸과 저장 공간을 만듭니다. 이미 이 파일을 실행했다면 같은 파일을 다시 실행합니다.
+
 `anon` 행이 없고, 표마다 `rls_enabled` 가 true 이면 정상입니다.
 
 ## 로그인 연결
@@ -121,6 +123,6 @@ GitHub 저장소는 공개이고, 데이터는 Supabase에 남습니다.
 
 Secret key 는 Secret 에도 넣지 않습니다.
 
-배포가 끝나면 주소는 `https://사용자이름.github.io/youlmaple/` 입니다.  
+배포가 끝나면 주소는 `https://사용자이름.github.io/yourmaple/` 입니다.  
 Supabase **Authentication → URL Configuration** 의 Site URL 을 그 주소로 바꿉니다.  
 Redirect URLs 에는 그 주소와 `http://127.0.0.1:5500` 을 함께 넣습니다.

@@ -1,4 +1,12 @@
 import { bosses, bossState, bossTimeParts, formatStamp, readBossTime } from "../boss-cooldown.js";
+import {
+  attachFaceUrls,
+  faceMarkup,
+  removeCharacterFace,
+  saveCharacterFace,
+  translateFaceError,
+  validateFaceFile,
+} from "../character-face.js";
 import { translateDbError } from "../db-error.js";
 import { escapeHtml, formatCount, readCount, sortByName } from "../format.js";
 import { filterRows, readLevelFilter } from "../filters.js";
@@ -11,8 +19,8 @@ const bossSelect =
   "pianus_enabled, pianus_at, papulatus_enabled, papulatus_at, rift_enabled, rift_at";
 const tailColumns = "updated_at, jobs(name, color, color_dark)";
 
-function characterSelect({ bosses: withBosses, questsHidden }) {
-  return [baseColumns, withBosses ? bossSelect : "", questsHidden ? "quests_hidden" : "", tailColumns]
+function characterSelect({ bosses: withBosses, questsHidden, face }) {
+  return [baseColumns, withBosses ? bossSelect : "", questsHidden ? "quests_hidden" : "", face ? "face_path" : "", tailColumns]
     .filter(Boolean)
     .join(", ");
 }
@@ -70,6 +78,16 @@ export async function render(root) {
         <h2 data-form-title>캐릭터 추가</h2>
         <label class="field"><span>계정</span><select name="account_id" required></select></label>
         <label class="field"><span>캐릭터명</span><input name="name" required /></label>
+        <div class="field span-all face-field">
+          <span>얼굴</span>
+          <div class="face-field-row">
+            <span class="face-preview" data-face-preview><span class="char-face is-empty">없음</span></span>
+            <input name="face" type="file" accept="image/png,image/jpeg,image/webp,image/gif" aria-label="얼굴 사진" />
+            <button class="text-button" type="button" data-clear-face hidden>얼굴 지우기</button>
+          </div>
+          <small class="field-note">캐릭터, 홈, 무릉에 보입니다. png, jpg, webp, gif, 2MB 이하.</small>
+          <small class="field-note" data-face-migrate hidden>얼굴을 저장하려면 Supabase SQL Editor에서 sql/026_character_face.sql 을 실행해 주세요.</small>
+        </div>
         <label class="field">
           <span>직업</span>
           <select name="job_id"></select>
@@ -119,7 +137,7 @@ export async function render(root) {
           </label>
           <label class="boss-switch boss-soon-also">
             <input type="checkbox" data-boss-soon-also />
-            <span>오늘 곧 보기</span>
+            <span>오늘·곧 보기</span>
           </label>
         </div>
       </div>
@@ -160,6 +178,9 @@ export async function render(root) {
   let loadId = 0;
   let bossReady = true;
   let questsHiddenReady = true;
+  let faceReady = false;
+  let faceRemoved = false;
+  let faceObjectUrl = "";
   let readyKey = "";
   const bossFilters = new Set();
   const bossUndo = new Map();
@@ -237,6 +258,7 @@ export async function render(root) {
       const field = form.elements.namedItem(key);
       if (
         field &&
+        field.type !== "file" &&
         key !== "account_id" &&
         key !== "job_id" &&
         key !== "jobs" &&
@@ -251,6 +273,12 @@ export async function render(root) {
       if (field) field.checked = Boolean(character[boss.columnEnabled]);
     }
     if (form.elements.quests_hidden) form.elements.quests_hidden.checked = Boolean(character.quests_hidden);
+    faceRemoved = false;
+    releaseFacePreview();
+    form.elements.face.value = "";
+    form.dataset.facePath = character.face_path || "";
+    syncFaceField();
+    paintFacePreview(character.face_url || "");
     form.elements.name.focus();
   }
 
@@ -258,8 +286,37 @@ export async function render(root) {
     form.hidden = true;
     form.dataset.editingId = "";
     form.dataset.legacyJob = "";
+    form.dataset.facePath = "";
     jobNote.hidden = true;
+    faceRemoved = false;
+    releaseFacePreview();
     form.reset();
+    paintFacePreview("");
+  }
+
+  function syncFaceField() {
+    const note = form.querySelector("[data-face-migrate]");
+    if (note) note.hidden = faceReady;
+    if (form.elements.face) form.elements.face.disabled = !faceReady;
+  }
+
+  function releaseFacePreview() {
+    if (!faceObjectUrl) return;
+    URL.revokeObjectURL(faceObjectUrl);
+    faceObjectUrl = "";
+  }
+
+  function paintFacePreview(src) {
+    const preview = form.querySelector("[data-face-preview]");
+    const clear = form.querySelector("[data-clear-face]");
+    if (!preview) return;
+    if (src) {
+      preview.innerHTML = `<img class="char-face" src="${escapeHtml(src)}" alt="" />`;
+      if (clear) clear.hidden = !faceReady;
+    } else {
+      preview.innerHTML = `<span class="char-face is-empty">없음</span>`;
+      if (clear) clear.hidden = true;
+    }
   }
 
   function characterCard(row) {
@@ -278,8 +335,11 @@ export async function render(root) {
     return `
       <li class="character-row"${style ? ` style="${style}"` : ""}>
         <div class="character-row-main">
-          <div class="character-title"><strong class="character-name">${escapeHtml(row.name)}</strong>${row.quests_hidden ? `<span class="tag">퀘스트 제외</span>` : ""}</div>
-          <span class="character-job">${jobText}</span>
+          ${faceMarkup(row.face_url)}
+          <div class="character-copy">
+            <div class="character-title"><strong class="character-name">${escapeHtml(row.name)}</strong>${row.quests_hidden ? `<span class="tag">퀘스트 제외</span>` : ""}</div>
+            <span class="character-job">${jobText}</span>
+          </div>
         </div>
         <div class="character-row-side">
           <span class="character-level"><span>Lv</span>${escapeHtml(formatCount(row.level))}</span>
@@ -533,6 +593,11 @@ export async function render(root) {
     return columnMissing(error, /quests_hidden/);
   }
 
+  function faceColumnMissing(error) {
+    const raw = `${error?.message || ""} ${error?.details || ""}`;
+    return /face_path/i.test(raw) && /could not find|schema cache|does not exist/i.test(raw);
+  }
+
   async function loadCharacters() {
     const current = ++loadId;
     list.innerHTML = `<p class="empty">캐릭터를 불러오는 중입니다.</p>`;
@@ -544,21 +609,29 @@ export async function render(root) {
     if (current !== loadId || !list.isConnected) return;
     let withBosses = true;
     let withQuestsHidden = true;
+    let withFace = true;
     let columnWarning = null;
     let characters = await supabase
       .from("characters")
-      .select(characterSelect({ bosses: withBosses, questsHidden: withQuestsHidden }))
+      .select(characterSelect({ bosses: withBosses, questsHidden: withQuestsHidden, face: withFace }))
       .order("updated_at", { ascending: false });
-    while (characters.error && (bossColumnMissing(characters.error) || questsHiddenMissing(characters.error))) {
+    while (
+      characters.error &&
+      (bossColumnMissing(characters.error) || questsHiddenMissing(characters.error) || faceColumnMissing(characters.error))
+    ) {
       const nextBosses = withBosses && !bossColumnMissing(characters.error);
       const nextQuests = withQuestsHidden && !questsHiddenMissing(characters.error);
-      if (nextBosses === withBosses && nextQuests === withQuestsHidden) break;
-      columnWarning = columnWarning || characters.error;
+      const nextFace = withFace && !faceColumnMissing(characters.error);
+      if (nextBosses === withBosses && nextQuests === withQuestsHidden && nextFace === withFace) break;
+      if (bossColumnMissing(characters.error) || questsHiddenMissing(characters.error)) {
+        columnWarning = columnWarning || characters.error;
+      }
       withBosses = nextBosses;
       withQuestsHidden = nextQuests;
+      withFace = nextFace;
       characters = await supabase
         .from("characters")
-        .select(characterSelect({ bosses: withBosses, questsHidden: withQuestsHidden }))
+        .select(characterSelect({ bosses: withBosses, questsHidden: withQuestsHidden, face: withFace }))
         .order("updated_at", { ascending: false });
       if (current !== loadId || !list.isConnected) return;
     }
@@ -573,6 +646,8 @@ export async function render(root) {
     }
     bossReady = withBosses;
     questsHiddenReady = withQuestsHidden;
+    faceReady = withFace;
+    syncFaceField();
     bossFields.hidden = !bossReady;
     questsHiddenFields.hidden = !questsHiddenReady;
     bossFilterBar.hidden = !bossReady;
@@ -590,6 +665,8 @@ export async function render(root) {
     accounts = sortByName(accountResult.data ?? []);
     jobs = jobResult.data ?? [];
     rows = characters.data ?? [];
+    if (withFace) await attachFaceUrls(supabase, rows);
+    if (current !== loadId || !list.isConnected) return;
     if (columnWarning) showStatus(translateDbError(columnWarning), "error");
     if (selectedServer) openServer(selectedServer);
     else paintGate();
@@ -756,6 +833,7 @@ export async function render(root) {
       showStatus(translateDbError(error), "error");
       return;
     }
+    await removeCharacterFace(supabase, row.face_path);
     if (form.dataset.editingId === row.id) closeForm();
     showStatus("캐릭터를 삭제했습니다.", "info");
     await loadCharacters();
@@ -977,6 +1055,28 @@ export async function render(root) {
     });
   }
 
+  form.elements.face.addEventListener("change", () => {
+    const file = form.elements.face.files?.[0];
+    if (!file) return;
+    const check = validateFaceFile(file);
+    if (check.error) {
+      form.elements.face.value = "";
+      showStatus(check.error, "error");
+      return;
+    }
+    faceRemoved = false;
+    releaseFacePreview();
+    faceObjectUrl = URL.createObjectURL(file);
+    paintFacePreview(faceObjectUrl);
+  });
+
+  form.querySelector("[data-clear-face]").addEventListener("click", () => {
+    form.elements.face.value = "";
+    faceRemoved = true;
+    releaseFacePreview();
+    paintFacePreview("");
+  });
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const parsed = readForm();
@@ -984,23 +1084,71 @@ export async function render(root) {
       showStatus(parsed.error, "error");
       return;
     }
+    const file = form.elements.face.files?.[0] || null;
+    if (file) {
+      const check = validateFaceFile(file);
+      if (check.error) {
+        showStatus(check.error, "error");
+        return;
+      }
+    }
     const saveButton = form.querySelector("[data-save]");
     saveButton.disabled = true;
     showStatus("저장하는 중입니다.", "info");
-    const supabase = await getSupabase();
-    const id = form.dataset.editingId;
-    const query = id
-      ? supabase.from("characters").update(parsed.value).eq("id", id)
-      : supabase.from("characters").insert(parsed.value);
-    const { error } = await query;
-    saveButton.disabled = false;
-    if (error) {
-      showStatus(translateDbError(error), "error");
-      return;
+    try {
+      const supabase = await getSupabase();
+      const id = form.dataset.editingId;
+      const creating = !id;
+      const query = id
+        ? supabase.from("characters").update(parsed.value).eq("id", id).select("id").single()
+        : supabase.from("characters").insert(parsed.value).select("id").single();
+      const { data, error } = await query;
+      if (error) {
+        showStatus(translateDbError(error), "error");
+        return;
+      }
+      const characterId = data.id;
+      form.dataset.editingId = characterId;
+      if (faceReady && (file || faceRemoved)) {
+        const faceResult = await saveCharacterFace(supabase, {
+          characterId,
+          file,
+          previousPath: form.dataset.facePath || "",
+          remove: faceRemoved && !file,
+        });
+        if (faceResult.error) {
+          title.textContent = "캐릭터 수정";
+          showStatus(
+            creating
+              ? `캐릭터는 저장했습니다. ${translateFaceError(faceResult.error)}`
+              : translateFaceError(faceResult.error),
+            "error",
+          );
+          return;
+        }
+        if (faceResult.changed) {
+          const { error: faceError } = await supabase
+            .from("characters")
+            .update({ face_path: faceResult.path })
+            .eq("id", characterId);
+          if (faceError) {
+            title.textContent = "캐릭터 수정";
+            showStatus(
+              creating ? `캐릭터는 저장했습니다. ${translateDbError(faceError)}` : translateDbError(faceError),
+              "error",
+            );
+            return;
+          }
+        }
+      }
+      closeForm();
+      showStatus(creating ? "캐릭터를 저장했습니다." : "캐릭터를 수정했습니다.", "info");
+      await loadCharacters();
+    } catch (error) {
+      showStatus(translateFaceError(error), "error");
+    } finally {
+      saveButton.disabled = false;
     }
-    closeForm();
-    showStatus(id ? "캐릭터를 수정했습니다." : "캐릭터를 저장했습니다.", "info");
-    await loadCharacters();
   });
 
   const bossTimer = window.setInterval(() => {

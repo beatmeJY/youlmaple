@@ -49,7 +49,7 @@ export function renderShell() {
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-panel">
         <div class="brand">
-          <strong>Youl maple</strong>
+          <strong>Your Maple</strong>
           <span>개인용 정보 메모</span>
           <button class="nav-toggle nav-close" type="button" data-close-nav aria-label="메뉴 닫기">${NAV_CHEVRON}</button>
         </div>
@@ -59,7 +59,7 @@ export function renderShell() {
       <div class="content">
         <header class="topbar">
           <button class="nav-toggle" type="button" data-open-nav aria-controls="sidebar" aria-expanded="true" aria-label="메뉴 닫기">${NAV_CHEVRON}</button>
-          <p class="topbar-title">Youl maple</p>
+          <p class="topbar-title">Your Maple</p>
           <div class="topbar-actions">
             <p class="account-email" id="account-email"></p>
             <button class="icon-button" type="button" data-logout>로그아웃</button>

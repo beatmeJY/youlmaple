@@ -1,7 +1,7 @@
 import { translateDbError } from "../db-error.js";
 import { compareName, escapeHtml, formatCount } from "../format.js";
 import { matchesText } from "../filters.js";
-import { faviconSrc, linkHost, normalizeLinkUrl } from "../link-url.js";
+import { faviconSrc, normalizeLinkUrl } from "../link-url.js";
 import { getSupabase } from "../supabase-client.js";
 import { notify } from "../toast.js";
 
@@ -20,14 +20,13 @@ function categoryOf(row) {
 function linkCard(row) {
   const href = escapeHtml(row.url);
   const title = escapeHtml(row.title);
-  const host = escapeHtml(linkHost(row.url) || row.url);
   const icon = faviconSrc(row.url);
   const image = icon
-    ? `<img class="link-favicon" src="${escapeHtml(icon)}" alt="" width="24" height="24" data-favicon referrerpolicy="no-referrer" />`
+    ? `<img class="link-favicon" src="${escapeHtml(icon)}" alt="" width="16" height="16" data-favicon referrerpolicy="no-referrer" />`
     : "";
   const memo = String(row.memo ?? "").trim();
   const category = categoryOf(row);
-  const note = memo ? `<p class="link-card-memo">${escapeHtml(memo)}</p>` : "";
+  const note = memo ? `<p class="link-card-memo" title="${escapeHtml(memo)}">${escapeHtml(memo)}</p>` : "";
   const chip = category ? `<span class="link-chip">${escapeHtml(category)}</span>` : "";
   return `
     <article class="link-card">
@@ -35,7 +34,6 @@ function linkCard(row) {
         <span class="link-mark">${image}<span class="link-mark-letter"${icon ? " hidden" : ""}>${escapeHtml(initial(row.title))}</span></span>
         <span class="link-card-copy">
           <strong title="${title}">${title}</strong>
-          <span class="link-host">${host}</span>
         </span>
       </a>
       ${note}
