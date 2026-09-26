@@ -90,18 +90,28 @@ function floorsTable() {
       : "";
     return `<div class="dojo-band" data-band-row="${band.start}"${saveTitle}>
       ${bossTip}
-      <span class="dojo-band-name"><span class="dojo-band-floor">${floorLabel}</span><span class="dojo-band-round">(${roundLabel})</span><span class="dojo-band-meta" data-band-points="${band.start}"></span></span>
-      <label class="dojo-band-time">
-        <input name="band_${band.start}" inputmode="numeric" autocomplete="off" aria-label="${label} 초" />
-        <span>초</span>
-      </label>
-      <span class="dojo-band-clock">
-        <span class="dojo-band-readout" data-band-time hidden>0:00.0</span>
-        <button class="dojo-band-btn" type="button" data-band-start="${band.start}" aria-label="${label} 시작">시작</button>
-        <button class="dojo-band-btn" type="button" data-band-stop="${band.start}" aria-label="${label} 종료" disabled>종료</button>
-        <button class="dojo-band-btn" type="button" data-band-apply="${band.start}" aria-label="${label} 반영">반영</button>
-        <button class="dojo-band-btn" type="button" data-band-cancel="${band.start}" aria-label="${label} 취소">취소</button>
-      </span>
+      <div class="dojo-band-info">
+        <span class="dojo-band-floor">${floorLabel}</span>
+        <span class="dojo-band-round">${roundLabel}</span>
+        <span class="dojo-band-points" data-band-points="${band.start}"></span>
+      </div>
+      <div class="dojo-band-controls">
+        <label class="dojo-band-time">
+          <input name="band_${band.start}" inputmode="numeric" autocomplete="off" aria-label="${label} 초" placeholder="0" />
+          <span>초</span>
+        </label>
+        <span class="dojo-band-clock">
+          <span class="dojo-band-readout" data-band-time hidden>0:00.0</span>
+          <button class="dojo-band-icon-btn" type="button" data-band-start="${band.start}" aria-label="${label} 시작">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6.5 4.6v10.8c0 .8.88 1.29 1.56.87l8.6-5.4a1 1 0 0 0 0-1.74l-8.6-5.4c-.68-.42-1.56.07-1.56.87Z" fill="currentColor"/></svg>
+          </button>
+          <button class="dojo-band-icon-btn is-stop" type="button" data-band-stop="${band.start}" aria-label="${label} 종료" disabled>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="5.2" y="5.2" width="9.6" height="9.6" rx="2.2" fill="currentColor"/></svg>
+          </button>
+          <button class="dojo-band-text-btn" type="button" data-band-apply="${band.start}" aria-label="${label} 반영">반영</button>
+          <button class="dojo-band-text-btn is-cancel" type="button" data-band-cancel="${band.start}" aria-label="${label} 취소">취소</button>
+        </span>
+      </div>
     </div>`;
   }).join("");
 }
@@ -185,6 +195,14 @@ export async function render(root) {
         <div data-plan></div>
       </section>
     </form>
+    <dialog class="belt-history-dialog" data-belt-history-dialog>
+      <div class="belt-history-head">
+        <h2 data-belt-history-title>시세 기록</h2>
+        <button class="text-button" type="button" data-belt-history-close aria-label="닫기">닫기</button>
+      </div>
+      <div data-belt-history-body></div>
+      <div class="belt-history-add" data-belt-history-add></div>
+    </dialog>
     </div>
   `;
 
@@ -192,6 +210,7 @@ export async function render(root) {
   const belts = root.querySelector("[data-belts]");
   const records = root.querySelector("[data-records]");
   const plan = root.querySelector("[data-plan]");
+  const beltHistoryDialog = root.querySelector("[data-belt-history-dialog]");
   let beltTip = document.getElementById("dojo-belt-tip");
   if (!beltTip) {
     beltTip = document.createElement("div");
@@ -534,6 +553,8 @@ export async function render(root) {
     const options = items.map((item) => ({
       key: chainKey(item.row.saves),
       label: chainText(item.row.saves),
+      actual: item.actual,
+      refSeconds: item.row.best ? item.row.best.seconds : null,
     }));
     if (!options.some((item) => item.key === clockTarget)) {
       clockTarget = routePending ? routePending.key : (options[0]?.key ?? null);
@@ -546,6 +567,9 @@ export async function render(root) {
       : pending
         ? formatStopwatch(routePending.seconds * 1000)
         : "0:00.0";
+    const active = options.find((item) => item.key === clockTarget) ?? null;
+    const actualMeta = active?.actual != null ? formatDuration(active.actual) : "-";
+    const refMeta = active?.refSeconds != null ? formatDuration(active.refSeconds) : "-";
     const choices = options
       .map(
         (item) =>
@@ -553,13 +577,33 @@ export async function render(root) {
       )
       .join("");
     return `<div class="dojo-timer${running ? " is-running" : ""}${pending ? " is-pending" : ""}">
-      <label class="dojo-timer-target"><span>저장 방법</span><select data-clock-target${running ? " disabled" : ""}>${choices}</select></label>
-      <span class="dojo-stopwatch${running ? " is-running" : ""}"><span class="dojo-stopwatch-time" data-clock-time>${time}</span></span>
-      <button class="dojo-stopwatch-btn" type="button" data-clock-start${busy ? " disabled" : ""}>시작</button>
-      <button class="dojo-stopwatch-btn" type="button" data-clock-stop${running ? "" : " disabled"}>종료</button>
-      <button class="dojo-stopwatch-btn" type="button" data-clock-apply>반영</button>
-      <button class="dojo-stopwatch-btn" type="button" data-clock-reset>초기화</button>
-      <button class="dojo-stopwatch-btn dojo-timer-save" type="button" data-save-clock${running || clockTarget == null ? " disabled" : ""}>저장</button>
+      <div class="dojo-timer-row is-top">
+        <label class="dojo-timer-target"><span>저장 방법</span><select data-clock-target${running ? " disabled" : ""}>${choices}</select></label>
+        <span class="dojo-timer-meta">
+          <span class="dojo-timer-meta-item"><span>실제</span><b>${escapeHtml(actualMeta)}</b></span>
+          <span class="dojo-timer-meta-item"><span>참고</span><b>${escapeHtml(refMeta)}</b></span>
+        </span>
+      </div>
+      <div class="dojo-timer-row is-bottom">
+        <div class="dojo-stopwatch-face">
+          <span class="dojo-stopwatch${running ? " is-running" : ""}">
+            <svg class="dojo-stopwatch-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="13" r="8.5" fill="none" stroke="currentColor" stroke-width="1.7"/>
+              <path d="M12 13V8.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M9.3 2.6h5.4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+              <path d="M18.3 6.1 19.7 4.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+            <span class="dojo-stopwatch-time" data-clock-time>${time}</span>
+          </span>
+        </div>
+        <div class="dojo-timer-actions">
+          <button class="dojo-stopwatch-btn is-start" type="button" data-clock-start${busy ? " disabled" : ""}>시작</button>
+          <button class="dojo-stopwatch-btn is-stop" type="button" data-clock-stop${running ? "" : " disabled"}>종료</button>
+          <button class="dojo-stopwatch-btn" type="button" data-clock-apply>반영</button>
+          <button class="dojo-stopwatch-btn" type="button" data-clock-reset>초기화</button>
+        </div>
+        <button class="dojo-stopwatch-btn dojo-timer-save" type="button" data-save-clock${running || clockTarget == null ? " disabled" : ""}>저장</button>
+      </div>
     </div>`;
   }
 
@@ -644,6 +688,7 @@ export async function render(root) {
           <button type="button" class="dojo-best-tab is-recommend${mode === "recommend" ? " is-active" : ""}" data-best-view="recommend" role="tab" aria-selected="${mode === "recommend"}"${hasRecommend ? "" : " disabled"}>추천 동선</button>
         </div>`;
     const beltEta = beltText(route, seconds, score || 0);
+    const beltFull = beltText(route, seconds, 0);
     const mesoHour = hourText(route, seconds);
     box.className = `dojo-best is-${mode}`;
     box.innerHTML = `
@@ -652,8 +697,10 @@ export async function render(root) {
           <p class="dojo-best-kicker">최적 동선</p>
           ${head}
         </div>
-        <p class="dojo-best-path">${path}</p>
-        <p class="dojo-best-score">${escapeHtml(formatCount(route.points))}<span>점</span></p>
+        <div class="dojo-best-headline">
+          <span>총 검은띠까지</span>
+          <strong>${escapeHtml(beltFull)}</strong>
+        </div>
         <div class="dojo-best-hero">
           <div class="dojo-best-hero-stat">
             <span>검은 허리띠까지</span>
@@ -670,13 +717,17 @@ export async function render(root) {
             <strong>${escapeHtml(formatPointsPerSecond(route.points, seconds))}</strong>
           </div>
           <div class="dojo-best-stat">
-            <span>소요 시간</span>
-            <strong>${escapeHtml(formatDuration(seconds))}</strong>
-          </div>
-          <div class="dojo-best-stat">
             <span>점수당 초</span>
             <strong>${escapeHtml(formatSecondsPerPoint(route.points, seconds))}</strong>
           </div>
+        </div>
+        <div class="dojo-best-route">
+          <p class="dojo-best-path">${path}</p>
+          <p class="dojo-best-duration">
+            <span>소요 시간</span><strong>${escapeHtml(formatDuration(seconds))}</strong>
+            <span class="dojo-best-duration-sep" aria-hidden="true">·</span>
+            <span>점수</span><strong>${escapeHtml(formatCount(route.points))}점</strong>
+          </p>
         </div>
       </div>
     `;
@@ -693,8 +744,6 @@ export async function render(root) {
         points.textContent = `${formatCount(total)}점`;
         points.title = `층마다 ${each}점, 이 구간 ${formatCount(total)}점`;
       }
-      const row = root.querySelector(`[data-band-row="${band.start}"]`);
-      row?.classList.remove("is-in-route");
     }
 
     const current = floorsOf();
@@ -751,13 +800,7 @@ export async function render(root) {
         }
         return compareRoutes(left.row.best, right.row.best);
       });
-    if (compared.best) {
-      for (const band of BANDS) {
-        const row = root.querySelector(`[data-band-row="${band.start}"]`);
-        const count = compared.best.runs.filter((run) => band.start >= run.start).length;
-        if (count > 0) row?.classList.add("is-in-route");
-      }
-    }
+    const timerHtml = timerBar(ranked);
     const body = ranked
       .map((item, index) => {
         const key = chainKey(item.row.saves);
@@ -797,7 +840,8 @@ export async function render(root) {
         }
         const timing = clock?.scope === "route" && clock.key === key ? " is-timing" : "";
         const landed = landedKey === key ? " is-landed" : "";
-        return `<div class="dojo-plan-row${index === 0 ? " is-selected" : ""}${timing}${landed}" data-chain="${escapeHtml(key)}">
+        const picked = clockTarget === key ? " is-picked" : "";
+        return `<div class="dojo-plan-row${index === 0 ? " is-selected" : ""}${timing}${landed}${picked}" data-chain="${escapeHtml(key)}" role="button" tabindex="0" aria-label="${escapeHtml(label)}을(를) 저장 방법으로 선택">
           <span class="dojo-cell is-save"><span class="dojo-value">${routeLabel}</span></span>
           <span class="dojo-cell is-score"><span class="dojo-value">${escapeHtml(formatCount(item.points))}점</span></span>
           <span class="dojo-cell is-ref-time"><span class="dojo-tag">참고</span><span class="dojo-value">${escapeHtml(refTime)}</span></span>
@@ -813,7 +857,7 @@ export async function render(root) {
       .join("");
     plan.innerHTML = `
       <div class="dojo-board">
-      ${timerBar(ranked)}
+      ${timerHtml}
       <div class="dojo-plan">
         ${planHead()}
         ${body}
@@ -881,23 +925,49 @@ export async function render(root) {
     }
   }
 
+  function beltHistoryBody(beltId) {
+    const history = priceRows.filter((row) => row.belt === beltId);
+    if (!history.length) return `<p class="hint">아직 시세가 없습니다.</p>`;
+    const rows = history
+      .map((row, index) => {
+        const delta = priceDelta(row, history[index + 1]);
+        return `<tr><td class="num">${escapeHtml(formatCount(row.price))}</td><td class="num ${delta.className}">${escapeHtml(delta.text)}</td><td>${escapeHtml(formatWhen(row.created_at))}</td><td><button class="text-button is-danger" type="button" data-delete-price="${escapeHtml(row.id)}">삭제</button></td></tr>`;
+      })
+      .join("");
+    return `<div class="table-wrap"><table class="data-table"><thead><tr><th>시세</th><th>이전과 차이</th><th>기록 시각</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function refreshBeltHistory(beltId) {
+    const belt = beltById(beltId);
+    if (!belt) return;
+    beltHistoryDialog.querySelector("[data-belt-history-body]").innerHTML = beltHistoryBody(beltId);
+    beltHistoryDialog.querySelector("[data-belt-history-add]").innerHTML = priceEditor(belt);
+  }
+
+  function openBeltHistory(beltId) {
+    const belt = beltById(beltId);
+    if (!belt) return;
+    beltHistoryDialog.dataset.belt = beltId;
+    beltHistoryDialog.querySelector("[data-belt-history-title]").textContent = `${belt.name} 시세 기록`;
+    refreshBeltHistory(beltId);
+    if (!beltHistoryDialog.open) beltHistoryDialog.showModal();
+  }
+
   function paintBelts() {
     hideBeltTip();
     const body = BELTS.map((belt) => {
       const history = priceRows.filter((row) => row.belt === belt.id);
-      const name = `<td rowspan="${Math.max(history.length, 1)}">${beltLabel(belt)}</td>`;
-      if (!history.length) {
-        return `<tr>${name}<td colspan="3">아직 시세가 없습니다.</td><td>${priceEditor(belt)}</td></tr>`;
-      }
-      return history
-        .map((row, index) => {
-          const latest = index === 0;
-          const delta = priceDelta(row, history[index + 1]);
-          return `<tr>${latest ? name : ""}<td class="num">${escapeHtml(formatCount(row.price))}</td><td class="num ${delta.className}">${escapeHtml(delta.text)}</td><td>${escapeHtml(formatWhen(row.created_at))}</td><td>${latest ? priceEditor(belt, row.id) : `<button class="text-button is-danger" type="button" data-delete-price="${escapeHtml(row.id)}">삭제</button>`}</td></tr>`;
-        })
-        .join("");
+      const latest = history[0] ?? null;
+      const priceCells = latest
+        ? (() => {
+            const delta = priceDelta(latest, history[1]);
+            return `<td class="num dojo-price-value">${escapeHtml(formatCount(latest.price))}</td><td class="num dojo-price-delta ${delta.className}">${escapeHtml(delta.text)}</td><td class="dojo-price-date">${escapeHtml(formatWhen(latest.created_at))}</td>`;
+          })()
+        : `<td colspan="3">아직 시세가 없습니다.</td>`;
+      return `<tr class="dojo-price-row" data-belt-row="${belt.id}" role="button" tabindex="0" aria-label="${escapeHtml(belt.name)} 시세 기록 보기"><td>${beltLabel(belt)}</td>${priceCells}</tr>`;
     }).join("");
-    belts.innerHTML = `<div class="table-wrap"><table class="data-table dojo-prices"><thead><tr><th>허리띠</th><th>시세</th><th>이전과 차이</th><th>기록</th><th></th></tr></thead><tbody>${body}</tbody></table></div>`;
+    belts.innerHTML = `<div class="table-wrap"><table class="data-table dojo-prices"><thead><tr><th>허리띠</th><th>시세</th><th>이전과 차이</th><th>기록일</th></tr></thead><tbody>${body}</tbody></table></div>`;
+    if (beltHistoryDialog.open && beltHistoryDialog.dataset.belt) refreshBeltHistory(beltHistoryDialog.dataset.belt);
   }
 
   function paintRecords() {
@@ -956,7 +1026,7 @@ export async function render(root) {
             <li><span>실제 시간</span><strong>${escapeHtml(actualTime)}</strong></li>
             <li><span>초당 점수</span><strong>${escapeHtml(perSecond)}</strong></li>
             <li><span>점수당 초</span><strong>${escapeHtml(perPoint)}</strong></li>
-            <li><span>총 검은색 허리띠 소요시간</span><strong>${escapeHtml(beltFull)}</strong></li>
+            <li><span>총 검은띠 시간</span><strong>${escapeHtml(beltFull)}</strong></li>
           </ul>
         </article>`;
       })
@@ -1321,6 +1391,20 @@ export async function render(root) {
     event.preventDefault();
     card.click();
   });
+  plan.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest("[data-chain]");
+    if (!row || event.target.closest("button, input")) return;
+    event.preventDefault();
+    row.click();
+  });
+  belts.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const row = event.target.closest("[data-belt-row]");
+    if (!row || event.target.closest("button, input")) return;
+    event.preventDefault();
+    row.click();
+  });
   function burstStart(button) {
     const rect = button.getBoundingClientRect();
     const node = document.createElement("span");
@@ -1394,6 +1478,16 @@ export async function render(root) {
       cancelBandPending();
       return;
     }
+    const chainRow = event.target.closest("[data-chain]");
+    if (chainRow && !event.target.closest(".dojo-run") && clock?.scope !== "route") {
+      const key = chainRow.dataset.chain;
+      if (key !== clockTarget) {
+        clockTarget = key;
+        if (routePending) routePending.key = clockTarget;
+        paintPlan();
+      }
+      return;
+    }
     const savePriceButton = event.target.closest("[data-save-price]");
     if (savePriceButton) {
       savePrice(savePriceButton.dataset.savePrice);
@@ -1402,6 +1496,16 @@ export async function render(root) {
     const deletePriceButton = event.target.closest("[data-delete-price]");
     if (deletePriceButton) {
       deletePrice(deletePriceButton.dataset.deletePrice);
+      return;
+    }
+    const beltHistoryClose = event.target.closest("[data-belt-history-close]");
+    if (beltHistoryClose) {
+      beltHistoryDialog.close();
+      return;
+    }
+    const beltRow = event.target.closest("[data-belt-row]");
+    if (beltRow && !event.target.closest("button, input")) {
+      openBeltHistory(beltRow.dataset.beltRow);
       return;
     }
     const openRow = event.target.closest("[data-open]");

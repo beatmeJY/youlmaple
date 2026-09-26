@@ -1,4 +1,4 @@
-import { escapeHtml, formatCount, readBig, readCount } from "../format.js";
+import { escapeHtml, formatCount, readBig, readCount, sortByName } from "../format.js";
 import { applyExpCoupons, asBig, buildPlan, formatMinutes, formatPerMinute, formatSigned, hourMeso } from "../hunt-calc.js";
 import { findJob, normalizeJobName } from "../job-label.js";
 import { levelExpSeed } from "../level-exp-seed.js";
@@ -142,6 +142,7 @@ export async function render(root) {
   let hunts = [];
   let curveRows = [];
   let characters = [];
+  let accounts = [];
   let jobs = [];
   let planExpSource = "minute";
 
@@ -371,7 +372,17 @@ export async function render(root) {
   }
 
   function characterSelectHtml(placeholder) {
-    return [`<option value="">${placeholder}</option>`, ...[...characters].sort(compareCharacter).map(characterOption)].join("");
+    const groups = accounts
+      .map((account) => {
+        const members = characters.filter((character) => character.account_id === account.id).sort(compareCharacter);
+        if (!members.length) return "";
+        return `<optgroup label="${escapeHtml(account.name)}">${members.map(characterOption).join("")}</optgroup>`;
+      })
+      .filter(Boolean);
+    const known = new Set(accounts.map((account) => account.id));
+    const loose = characters.filter((character) => !known.has(character.account_id)).sort(compareCharacter);
+    if (loose.length) groups.push(`<optgroup label="계정 없음">${loose.map(characterOption).join("")}</optgroup>`);
+    return [`<option value="">${placeholder}</option>`, ...groups].join("");
   }
 
   function paintCharacterPick() {
@@ -559,10 +570,11 @@ export async function render(root) {
 
   async function loadAll() {
     const supabase = await getSupabase();
-    const [huntResult, curveResult, characterResult] = await Promise.all([
+    const [huntResult, curveResult, characterResult, accountResult] = await Promise.all([
       supabase.from("hunts").select("id, character_id, character_name, job, level, potion_cost, leech_fee, exp_per_hour, meso_per_hour, title, memo, created_at").order("created_at", { ascending: false }),
       supabase.from("level_exp").select("id, level, exp_to_next").order("level", { ascending: true }),
       supabase.from("characters").select("id, account_id, name, job, level, current_exp"),
+      supabase.from("accounts").select("id, name").order("name"),
     ]);
     const jobResult = await supabase.from("jobs").select("id, family, name, color, color_dark, sort_order").order("sort_order");
     if (!root.isConnected) return;
@@ -571,6 +583,7 @@ export async function render(root) {
       hunts = [];
       curveRows = [];
       characters = [];
+      accounts = [];
       jobs = [];
       notify(translateDbError(error), "error");
       paintPlan();
@@ -579,6 +592,7 @@ export async function render(root) {
     hunts = huntResult.data ?? [];
     curveRows = curveResult.data ?? [];
     characters = characterResult.data ?? [];
+    accounts = accountResult.error ? [] : sortByName(accountResult.data ?? []);
     jobs = jobResult.error ? [] : (jobResult.data ?? []);
     const seeded = await saveMissingLevels(supabase);
     if (!root.isConnected) return;
